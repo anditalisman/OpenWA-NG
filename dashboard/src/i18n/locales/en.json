@@ -520,7 +520,8 @@
       "role": "Role",
       "status": "Status",
       "lastUsed": "Last Used",
-      "actions": "Actions"
+      "actions": "Actions",
+      "sessions": "Sessions"
     },
     "statuses": {
       "active": "Active",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "Copy",
       "revoke": "Revoke",
-      "delete": "Delete"
-    }
+      "delete": "Delete",
+      "edit": "Edit"
+    },
+    "sessionsLabel": "Sessions",
+    "sessionsHint": "Leave empty to allow access to every session",
+    "noSessionsYet": "No sessions yet",
+    "allSessions": "All sessions",
+    "sessionsCount": "{{count}} session",
+    "sessionsCount_other": "{{count}} sessions",
+    "editTitle": "Edit API Key",
+    "saveChanges": "Save Changes"
   },
   "logs": {
     "title": "Audit Logs",

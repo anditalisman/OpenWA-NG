@@ -15,6 +15,7 @@ import {
   type StatsPeriod,
   type CreateInstanceInput,
   type UpdateInstanceInput,
+  type ApiKey,
 } from '../services/api';
 
 // ── Query Keys ────────────────────────────────────────────────────────
@@ -192,6 +193,19 @@ export function useCreateApiKeyMutation() {
       allowedSessions?: string[];
       expiresAt?: string;
     }) => apiKeyApi.create(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys });
+    },
+  });
+}
+
+export function useUpdateApiKeyMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: {
+      id: string;
+      data: { name?: string; role?: ApiKey['role']; allowedSessions?: string[]; allowedIps?: string[] };
+    }) => apiKeyApi.update(params.id, params.data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys });
     },

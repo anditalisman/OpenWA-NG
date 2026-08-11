@@ -520,7 +520,8 @@
       "role": "పాత్ర",
       "status": "స్థితి",
       "lastUsed": "చివరిగా ఉపయోగించినది",
-      "actions": "చర్యలు"
+      "actions": "చర్యలు",
+      "sessions": "సెషన్‌లు"
     },
     "statuses": {
       "active": "యాక్టివ్",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "కాపీ",
       "revoke": "రద్దు చేయి",
-      "delete": "తొలగించు"
-    }
+      "delete": "తొలగించు",
+      "edit": "ఎడిట్ చేయి"
+    },
+    "sessionsLabel": "సెషన్‌లు",
+    "sessionsHint": "అన్ని సెషన్‌లకు యాక్సెస్ ఇవ్వడానికి ఖాళీగా ఉంచండి",
+    "noSessionsYet": "ఇంకా సెషన్‌లు లేవు",
+    "allSessions": "అన్ని సెషన్‌లు",
+    "sessionsCount": "{{count}} సెషన్",
+    "sessionsCount_other": "{{count}} సెషన్‌లు",
+    "editTitle": "API కీని ఎడిట్ చేయండి",
+    "saveChanges": "మార్పులను సేవ్ చేయి"
   },
   "logs": {
     "title": "ఆడిట్ లాగ్స్",

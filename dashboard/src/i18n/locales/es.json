@@ -475,7 +475,8 @@
       "role": "Rol",
       "status": "Estado",
       "lastUsed": "Último uso",
-      "actions": "Acciones"
+      "actions": "Acciones",
+      "sessions": "Sesiones"
     },
     "statuses": {
       "active": "Activa",
@@ -496,8 +497,17 @@
     "actions": {
       "copy": "Copiar",
       "revoke": "Revocar",
-      "delete": "Eliminar"
-    }
+      "delete": "Eliminar",
+      "edit": "Editar"
+    },
+    "sessionsLabel": "Sesiones",
+    "sessionsHint": "Déjalo vacío para permitir acceso a todas las sesiones",
+    "noSessionsYet": "Aún no hay sesiones",
+    "allSessions": "Todas las sesiones",
+    "sessionsCount": "{{count}} sesión",
+    "sessionsCount_other": "{{count}} sesiones",
+    "editTitle": "Editar clave API",
+    "saveChanges": "Guardar cambios"
   },
   "logs": {
     "title": "Registros de auditoría",
