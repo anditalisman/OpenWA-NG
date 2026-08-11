@@ -520,7 +520,8 @@
       "role": "角色",
       "status": "狀態",
       "lastUsed": "上次使用",
-      "actions": "操作"
+      "actions": "操作",
+      "sessions": "工作階段"
     },
     "statuses": {
       "active": "活躍",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "複製",
       "revoke": "撤銷",
-      "delete": "刪除"
-    }
+      "delete": "刪除",
+      "edit": "編輯"
+    },
+    "sessionsLabel": "工作階段",
+    "sessionsHint": "留空以允許存取所有工作階段",
+    "noSessionsYet": "尚無工作階段",
+    "allSessions": "所有工作階段",
+    "sessionsCount": "{{count}} 個工作階段",
+    "sessionsCount_other": "{{count}} 個工作階段",
+    "editTitle": "編輯 API 金鑰",
+    "saveChanges": "儲存變更"
   },
   "logs": {
     "title": "審計記錄",

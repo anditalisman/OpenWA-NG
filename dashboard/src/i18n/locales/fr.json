@@ -520,7 +520,8 @@
       "role": "Rôle",
       "status": "Statut",
       "lastUsed": "Dernière utilisation",
-      "actions": "Actions"
+      "actions": "Actions",
+      "sessions": "Sessions"
     },
     "statuses": {
       "active": "Active",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "Copier",
       "revoke": "Révoquer",
-      "delete": "Supprimer"
-    }
+      "delete": "Supprimer",
+      "edit": "Modifier"
+    },
+    "sessionsLabel": "Sessions",
+    "sessionsHint": "Laissez vide pour autoriser l'accès à toutes les sessions",
+    "noSessionsYet": "Aucune session pour le moment",
+    "allSessions": "Toutes les sessions",
+    "sessionsCount": "{{count}} session",
+    "sessionsCount_other": "{{count}} sessions",
+    "editTitle": "Modifier la clé API",
+    "saveChanges": "Enregistrer les modifications"
   },
   "logs": {
     "title": "Journaux d'audit",

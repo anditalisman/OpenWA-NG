@@ -520,7 +520,8 @@
       "role": "Rolle",
       "status": "Status",
       "lastUsed": "Zuletzt verwendet",
-      "actions": "Aktionen"
+      "actions": "Aktionen",
+      "sessions": "Sitzungen"
     },
     "statuses": {
       "active": "Aktiv",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "Kopieren",
       "revoke": "Widerrufen",
-      "delete": "Löschen"
-    }
+      "delete": "Löschen",
+      "edit": "Bearbeiten"
+    },
+    "sessionsLabel": "Sitzungen",
+    "sessionsHint": "Leer lassen, um Zugriff auf alle Sitzungen zu erlauben",
+    "noSessionsYet": "Noch keine Sitzungen",
+    "allSessions": "Alle Sitzungen",
+    "sessionsCount": "{{count}} Sitzung",
+    "sessionsCount_other": "{{count}} Sitzungen",
+    "editTitle": "API-Schlüssel bearbeiten",
+    "saveChanges": "Änderungen speichern"
   },
   "logs": {
     "title": "Audit-Protokolle",

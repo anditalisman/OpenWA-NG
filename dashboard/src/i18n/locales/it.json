@@ -520,7 +520,8 @@
       "role": "Ruolo",
       "status": "Stato",
       "lastUsed": "Ultimo Utilizzo",
-      "actions": "Azioni"
+      "actions": "Azioni",
+      "sessions": "Sessioni"
     },
     "statuses": {
       "active": "Attiva",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "Copia",
       "revoke": "Revoca",
-      "delete": "Elimina"
-    }
+      "delete": "Elimina",
+      "edit": "Modifica"
+    },
+    "sessionsLabel": "Sessioni",
+    "sessionsHint": "Lascia vuoto per consentire l'accesso a tutte le sessioni",
+    "noSessionsYet": "Nessuna sessione ancora",
+    "allSessions": "Tutte le sessioni",
+    "sessionsCount": "{{count}} sessione",
+    "sessionsCount_other": "{{count}} sessioni",
+    "editTitle": "Modifica Chiave API",
+    "saveChanges": "Salva Modifiche"
   },
   "logs": {
     "title": "Log di Controllo",

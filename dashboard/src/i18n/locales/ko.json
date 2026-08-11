@@ -520,7 +520,8 @@
       "role": "역할",
       "status": "상태",
       "lastUsed": "마지막 사용",
-      "actions": "작업"
+      "actions": "작업",
+      "sessions": "세션"
     },
     "statuses": {
       "active": "활성",
@@ -541,8 +542,17 @@
     "actions": {
       "copy": "복사",
       "revoke": "폐기",
-      "delete": "삭제"
-    }
+      "delete": "삭제",
+      "edit": "편집"
+    },
+    "sessionsLabel": "세션",
+    "sessionsHint": "비워두면 모든 세션에 접근할 수 있습니다",
+    "noSessionsYet": "아직 세션이 없습니다",
+    "allSessions": "모든 세션",
+    "sessionsCount": "세션 {{count}}개",
+    "sessionsCount_other": "세션 {{count}}개",
+    "editTitle": "API 키 편집",
+    "saveChanges": "변경 사항 저장"
   },
   "logs": {
     "title": "감사 로그",

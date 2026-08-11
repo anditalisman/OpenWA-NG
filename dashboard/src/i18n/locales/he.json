@@ -529,7 +529,8 @@
       "role": "תפקיד",
       "status": "סטטוס",
       "lastUsed": "שימוש אחרון",
-      "actions": "פעולות"
+      "actions": "פעולות",
+      "sessions": "Sessions"
     },
     "statuses": {
       "active": "פעיל",
@@ -550,8 +551,19 @@
     "actions": {
       "copy": "העתקה",
       "revoke": "ביטול",
-      "delete": "מחיקה"
-    }
+      "delete": "מחיקה",
+      "edit": "עריכה"
+    },
+    "sessionsLabel": "Sessions",
+    "sessionsHint": "השאר ריק כדי לאפשר גישה לכל ה-Sessions",
+    "noSessionsYet": "אין עדיין Sessions",
+    "allSessions": "כל ה-Sessions",
+    "sessionsCount": "{{count}} Session",
+    "sessionsCount_other": "{{count}} Sessions",
+    "sessionsCount_two": "שני Sessions",
+    "sessionsCount_many": "{{count}} Sessions",
+    "editTitle": "עריכת מפתח API",
+    "saveChanges": "שמירת שינויים"
   },
   "logs": {
     "title": "לוגים",

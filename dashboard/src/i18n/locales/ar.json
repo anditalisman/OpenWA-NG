@@ -535,7 +535,8 @@
       "role": "الدور",
       "status": "الحالة",
       "lastUsed": "آخر استخدام",
-      "actions": "إجراءات"
+      "actions": "إجراءات",
+      "sessions": "الجلسات"
     },
     "statuses": {
       "active": "نشط",
@@ -556,8 +557,21 @@
     "actions": {
       "copy": "نسخ",
       "revoke": "إلغاء",
-      "delete": "حذف"
-    }
+      "delete": "حذف",
+      "edit": "تعديل"
+    },
+    "sessionsLabel": "الجلسات",
+    "sessionsHint": "اتركه فارغًا للسماح بالوصول إلى جميع الجلسات",
+    "noSessionsYet": "لا توجد جلسات بعد",
+    "allSessions": "جميع الجلسات",
+    "sessionsCount": "{{count}} جلسة",
+    "sessionsCount_other": "{{count}} جلسة",
+    "sessionsCount_two": "جلستان",
+    "sessionsCount_few": "{{count}} جلسات",
+    "sessionsCount_many": "{{count}} جلسة",
+    "sessionsCount_zero": "بدون جلسات",
+    "editTitle": "تعديل مفتاح API",
+    "saveChanges": "حفظ التغييرات"
   },
   "logs": {
     "title": "سجلات التدقيق",

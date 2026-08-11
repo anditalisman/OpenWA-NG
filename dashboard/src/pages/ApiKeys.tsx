@@ -19,14 +19,17 @@ import {
   KeyRound,
   AlertTriangle,
   AlertCircle,
+  Pencil,
 } from 'lucide-react';
 import type { ApiKey } from '../services/api';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   useApiKeysQuery,
   useCreateApiKeyMutation,
+  useUpdateApiKeyMutation,
   useDeleteApiKeyMutation,
   useRevokeApiKeyMutation,
+  useSessionsQuery,
 } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
@@ -53,15 +56,24 @@ export function ApiKeys() {
   const toast = useToast();
   useDocumentTitle(t('apiKeys.title'));
   const { data: apiKeys = [], isLoading: loading, isError: apiKeysError } = useApiKeysQuery();
+  const { data: sessions = [] } = useSessionsQuery();
   const createMutation = useCreateApiKeyMutation();
+  const updateMutation = useUpdateApiKeyMutation();
   const deleteMutation = useDeleteApiKeyMutation();
   const revokeMutation = useRevokeApiKeyMutation();
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState(false);
-  const [newKey, setNewKey] = useState({ name: '', role: 'operator' });
+  const [newKey, setNewKey] = useState<{ name: string; role: string; allowedSessions: string[] }>({
+    name: '',
+    role: 'operator',
+    allowedSessions: [],
+  });
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ type: 'delete' | 'revoke'; id: string; name: string } | null>(
+    null,
+  );
+  const [editKey, setEditKey] = useState<{ id: string; name: string; role: string; allowedSessions: string[] } | null>(
     null,
   );
 
@@ -77,12 +89,60 @@ export function ApiKeys() {
   const handleCreate = async () => {
     if (!newKey.name) return;
     try {
-      const created = await createMutation.mutateAsync({ name: newKey.name, role: newKey.role });
+      const created = await createMutation.mutateAsync({
+        name: newKey.name,
+        role: newKey.role,
+        allowedSessions: newKey.allowedSessions,
+      });
       setCreatedKey(created.apiKey || null);
-      setNewKey({ name: '', role: 'operator' });
+      setNewKey({ name: '', role: 'operator', allowedSessions: [] });
     } catch (err) {
       console.error('Failed to create:', err);
       toast.error(t('apiKeys.createBtn'), err instanceof Error ? err.message : t('common.unknownError'));
+    }
+  };
+
+  const toggleNewSession = (sessionId: string) => {
+    setNewKey(prev => ({
+      ...prev,
+      allowedSessions: prev.allowedSessions.includes(sessionId)
+        ? prev.allowedSessions.filter(id => id !== sessionId)
+        : [...prev.allowedSessions, sessionId],
+    }));
+  };
+
+  const openEdit = (apiKey: ApiKey) => {
+    setEditKey({ id: apiKey.id, name: apiKey.name, role: apiKey.role, allowedSessions: apiKey.allowedSessions ?? [] });
+  };
+
+  const toggleEditSession = (sessionId: string) => {
+    setEditKey(prev =>
+      prev
+        ? {
+            ...prev,
+            allowedSessions: prev.allowedSessions.includes(sessionId)
+              ? prev.allowedSessions.filter(id => id !== sessionId)
+              : [...prev.allowedSessions, sessionId],
+          }
+        : prev,
+    );
+  };
+
+  const handleEdit = async () => {
+    if (!editKey) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: editKey.id,
+        data: {
+          name: editKey.name,
+          role: editKey.role as ApiKey['role'],
+          allowedSessions: editKey.allowedSessions,
+        },
+      });
+      setEditKey(null);
+    } catch (err) {
+      console.error('Failed to update:', err);
+      toast.error(t('apiKeys.actions.edit'), err instanceof Error ? err.message : t('common.unknownError'));
     }
   };
 
@@ -156,6 +216,22 @@ export function ApiKeys() {
         header: () => t('apiKeys.columns.role'),
         cell: info => <span className="permission-badge">{info.getValue()}</span>,
       }),
+      columnHelper.accessor('allowedSessions', {
+        id: 'sessions',
+        header: () => t('apiKeys.columns.sessions'),
+        cell: info => {
+          const allowed = info.getValue();
+          if (!allowed || allowed.length === 0) {
+            return <span className="permission-badge sessions-badge all">{t('apiKeys.allSessions')}</span>;
+          }
+          const names = allowed.map(id => sessions.find(s => s.id === id)?.name ?? id);
+          return (
+            <span className="permission-badge sessions-badge scoped" title={names.join(', ')}>
+              {t('apiKeys.sessionsCount', { count: allowed.length })}
+            </span>
+          );
+        },
+      }),
       columnHelper.accessor('isActive', {
         header: () => t('apiKeys.columns.status'),
         cell: info => (
@@ -182,6 +258,9 @@ export function ApiKeys() {
             <span className="actions-cell">
               {/* No per-row copy: the full key only exists once (post-creation modal); the row
                   only has the prefix, so a copy button here could only copy a useless fragment. */}
+              <button className="icon-btn" onClick={() => openEdit(apiKey)} title={t('apiKeys.actions.edit')}>
+                <Pencil size={16} />
+              </button>
               {apiKey.isActive && (
                 <button
                   className="icon-btn"
@@ -203,7 +282,7 @@ export function ApiKeys() {
         },
       }),
     ],
-    [visibleKeys, t],
+    [visibleKeys, sessions, t],
   );
 
   const table = useReactTable({
@@ -308,7 +387,88 @@ export function ApiKeys() {
                   </option>
                 ))}
               </select>
+              <label>{t('apiKeys.sessionsLabel')}</label>
+              <p className="sessions-hint">{t('apiKeys.sessionsHint')}</p>
+              {sessions.length === 0 ? (
+                <p className="sessions-hint">{t('apiKeys.noSessionsYet')}</p>
+              ) : (
+                <div className="session-tags">
+                  {sessions.map(s => {
+                    const isSelected = newKey.allowedSessions.includes(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className={`session-tag ${isSelected ? 'selected' : ''}`}
+                        onClick={() => toggleNewSession(s.id)}
+                      >
+                        {isSelected && <Check size={12} className="tag-check-icon" />}
+                        {s.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </>
+          )}
+        </Modal>
+      )}
+
+      {editKey && (
+        <Modal
+          open
+          onClose={() => setEditKey(null)}
+          title={t('apiKeys.editTitle')}
+          closeLabel={t('common.close')}
+          footer={
+            <>
+              <button className="btn-secondary" onClick={() => setEditKey(null)}>
+                {t('common.cancel')}
+              </button>
+              <button className="btn-primary" onClick={handleEdit} disabled={updateMutation.isPending || !editKey.name}>
+                {updateMutation.isPending ? <Loader2 className="animate-spin" size={16} /> : t('apiKeys.saveChanges')}
+              </button>
+            </>
+          }
+        >
+          <label>{t('common.name')}</label>
+          <input
+            type="text"
+            value={editKey.name}
+            onChange={e => setEditKey(prev => (prev ? { ...prev, name: e.target.value } : prev))}
+          />
+          <label>{t('common.role')}</label>
+          <select
+            value={editKey.role}
+            onChange={e => setEditKey(prev => (prev ? { ...prev, role: e.target.value } : prev))}
+          >
+            {roleNames.map(r => (
+              <option key={r} value={r}>
+                {t(`apiKeys.roles.${r}`)}
+              </option>
+            ))}
+          </select>
+          <label>{t('apiKeys.sessionsLabel')}</label>
+          <p className="sessions-hint">{t('apiKeys.sessionsHint')}</p>
+          {sessions.length === 0 ? (
+            <p className="sessions-hint">{t('apiKeys.noSessionsYet')}</p>
+          ) : (
+            <div className="session-tags">
+              {sessions.map(s => {
+                const isSelected = editKey.allowedSessions.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={`session-tag ${isSelected ? 'selected' : ''}`}
+                    onClick={() => toggleEditSession(s.id)}
+                  >
+                    {isSelected && <Check size={12} className="tag-check-icon" />}
+                    {s.name}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </Modal>
       )}
