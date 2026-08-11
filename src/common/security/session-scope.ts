@@ -7,16 +7,18 @@
  * Returns:
  *   - `null`     → no filter; the caller queries all sessions (unrestricted key, no narrowing)
  *   - `string[]` (non-empty) → filter `sessionId IN (...)` (the whole allowlist, or a single narrowed id)
- *   - `[]`       → the requested session is outside the key's scope; the caller must return nothing
+ *   - `[]`       → the caller has zero visible sessions (an explicit `[]`, or the requested session
+ *                  fell outside a non-empty allowlist) — the caller must return nothing
  *
- * A null/empty `allowedSessions` means "unrestricted" (e.g. an ADMIN key), mirroring the guard model.
+ * ONLY `null`/`undefined` means "unrestricted" (an ADMIN key, per AuthService.effectiveAllowedSessions).
+ * An explicit `[]` is NOT the same as null — it's a non-admin unscoped key that hasn't created any
+ * sessions yet (resolveEffectiveAllowedSessions), and must resolve to "nothing visible", not "everything".
  */
 export function resolveSessionScope(
   allowedSessions: string[] | null | undefined,
   requestedSessionId?: string,
 ): string[] | null {
-  const scoped = allowedSessions != null && allowedSessions.length > 0;
-  if (scoped) {
+  if (allowedSessions != null) {
     return requestedSessionId ? allowedSessions.filter(s => s === requestedSessionId) : allowedSessions;
   }
   return requestedSessionId ? [requestedSessionId] : null;
@@ -24,9 +26,10 @@ export function resolveSessionScope(
 
 /**
  * True when `sessionScope` — a resource's session binding, where null/undefined means "all
- * sessions" — falls inside the calling key's `allowedSessions`. An unrestricted key (no allowlist)
- * sees every scope; a scoped key only sees resources bound to one of its own sessions, so a null
- * scope (and the '*' wildcard) is never inside its fence. Use this on surfaces whose session
+ * sessions" — falls inside the calling key's `allowedSessions`. An unrestricted key (`allowedSessions`
+ * null/undefined) sees every scope; a scoped key — including an explicit `[]`, which sees NOTHING, not
+ * everything (see resolveSessionScope's doc) — only sees resources bound to one of its own sessions,
+ * so a null scope (and the '*' wildcard) is never inside its fence. Use this on surfaces whose session
  * binding travels in the request body or in persisted rows, which the ApiKeyGuard's route-param
  * fence cannot reach (the same body/persisted-scope pattern the integration-instance controller
  * uses to confine a scoped key to instances bound inside its allowedSessions).
@@ -35,6 +38,6 @@ export function sessionScopeVisible(
   allowedSessions: string[] | null | undefined,
   sessionScope: string | null | undefined,
 ): boolean {
-  if (allowedSessions == null || allowedSessions.length === 0) return true;
+  if (allowedSessions == null) return true;
   return sessionScope != null && sessionScope !== '*' && allowedSessions.includes(sessionScope);
 }

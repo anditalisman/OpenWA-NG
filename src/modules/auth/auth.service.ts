@@ -13,6 +13,7 @@ import { randomBytes } from 'crypto';
 import { ipMatches } from '../../common/utils/ip';
 import { hashApiKey } from './api-key-hash';
 import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
+import { Session } from '../session/entities/session.entity';
 import { CreateApiKeyDto, UpdateApiKeyDto } from './dto';
 import { createLogger } from '../../common/services/logger.service';
 import { readBootstrapKey, removeBootstrapKey, writeBootstrapKey } from './bootstrap-key-file';
@@ -70,6 +71,8 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectRepository(ApiKey, 'main')
     private readonly apiKeyRepository: Repository<ApiKey>,
+    @InjectRepository(Session, 'data')
+    private readonly sessionRepository: Repository<Session>,
     private readonly usageTracker: ApiKeyUsageTracker,
     private readonly moduleRef: ModuleRef,
   ) {}
@@ -448,17 +451,40 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Check session restriction
-    if (apiKey.allowedSessions && apiKey.allowedSessions.length > 0 && sessionId) {
-      if (!apiKey.allowedSessions.includes(sessionId)) {
-        throw new UnauthorizedException('API key not authorized for this session');
-      }
+    apiKey.effectiveAllowedSessions = await this.resolveEffectiveAllowedSessions(apiKey);
+
+    // Check session restriction — against the *effective* scope, so a non-admin unscoped key is
+    // correctly confined to the sessions it created, not every session in the deployment. null means
+    // unrestricted (skip the check entirely); an empty array (non-admin, owns nothing yet) correctly
+    // rejects every sessionId, same as a non-empty list that just doesn't happen to include it.
+    if (sessionId && apiKey.effectiveAllowedSessions !== null && !apiKey.effectiveAllowedSessions.includes(sessionId)) {
+      throw new UnauthorizedException('API key not authorized for this session');
     }
 
     // Advisory stats only; the tracker coalesces the write and never throws.
     await this.usageTracker.record(apiKey);
 
     return apiKey;
+  }
+
+  /**
+   * Resolves the session-visibility scope a key should actually be held to. ADMIN mirrors the raw
+   * column (null/empty = every session — unchanged, longstanding behaviour). A non-admin key with an
+   * explicit `allowedSessions` keeps that admin-configured list untouched. A non-admin key with NO
+   * explicit `allowedSessions` ("unscoped") no longer means "every session" — it resolves to the ids
+   * of sessions this same key created (Session.createdByApiKeyId), which may be an empty list for a
+   * key that hasn't created any yet. `allowedSessions` itself is deliberately left unmodified — see
+   * the field doc on ApiKey.effectiveAllowedSessions for why the two must stay separate.
+   */
+  private async resolveEffectiveAllowedSessions(apiKey: ApiKey): Promise<string[] | null> {
+    if (apiKey.role === ApiKeyRole.ADMIN) {
+      return apiKey.allowedSessions ?? null;
+    }
+    if (apiKey.allowedSessions && apiKey.allowedSessions.length > 0) {
+      return apiKey.allowedSessions;
+    }
+    const owned = await this.sessionRepository.find({ where: { createdByApiKeyId: apiKey.id }, select: { id: true } });
+    return owned.map(s => s.id);
   }
 
   private hashKey(rawKey: string): string {

@@ -32,11 +32,13 @@ export class SearchController {
     if (!dto.q || !dto.q.trim()) {
       throw new BadRequestException('Query parameter "q" is required and must be non-empty.');
     }
-    // callerSessionIds comes ONLY from the authenticated key's allowedSessions — never from the
-    // query/body — so a scoped key cannot broaden its reach. A null/empty allowlist (e.g. ADMIN)
-    // resolves to undefined → searches all sessions, mirroring GET /webhooks. The DTO carries no
-    // `sessionIds` field (the global ValidationPipe's forbidNonWhitelisted would reject it anyway),
-    // and SearchService makes scope authoritative by overwriting sessionIds at the provider boundary.
-    return this.searchService.search(dto, apiKey?.allowedSessions ?? undefined);
+    // callerSessionIds comes ONLY from the authenticated key's *effective* session list
+    // (AuthService.validateApiKey) — never from the query/body — so a scoped key cannot broaden its
+    // reach. A null allowlist (ADMIN only) resolves to undefined → searches all sessions, mirroring
+    // GET /webhooks; a non-admin key otherwise searches its explicit allowedSessions or, if unscoped,
+    // just the sessions it created. The DTO carries no `sessionIds` field (the global ValidationPipe's
+    // forbidNonWhitelisted would reject it anyway), and SearchService makes scope authoritative by
+    // overwriting sessionIds at the provider boundary.
+    return this.searchService.search(dto, apiKey?.effectiveAllowedSessions ?? undefined);
   }
 }

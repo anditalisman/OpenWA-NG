@@ -57,14 +57,15 @@ import { SUBSCRIBABLE_EVENTS, buildRoomName } from './dto/ws-messages.dto';
 import type { DeliveryStatus } from '../../engine/interfaces/whatsapp-engine.interface';
 
 /**
- * Whether an API key may subscribe to a session's WebSocket event rooms.
- * An unrestricted key (no `allowedSessions`) may subscribe to anything, including
- * the `*` wildcard. A key scoped to specific sessions may NOT subscribe to `*`
- * (which would receive every session's events) nor to a session outside its
- * allowlist — preventing cross-tenant event leakage (#221).
+ * Whether an API key may subscribe to a session's WebSocket event rooms. Takes the caller's
+ * *effective* session list (AuthService.resolveEffectiveAllowedSessions), not the raw
+ * `allowedSessions` column. An unrestricted key (`null`/`undefined` — ADMIN only) may subscribe to
+ * anything, including the `*` wildcard. A scoped key — including a non-admin unscoped key resolved
+ * to an explicit `[]` (owns no sessions yet) — may NOT subscribe to `*` (which would receive every
+ * session's events) nor to a session outside its list — preventing cross-tenant event leakage (#221).
  */
 export function isSessionSubscriptionAllowed(allowedSessions: string[] | null | undefined, sessionId: string): boolean {
-  if (!allowedSessions || allowedSessions.length === 0) {
+  if (allowedSessions == null) {
     return true;
   }
   if (sessionId === '*') {
@@ -364,7 +365,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     // here too, not just at connect.
     const rawApiKey = (client.data as { rawApiKey?: string }).rawApiKey;
     const clientIp = this.resolveClientIp(client);
-    let subscriberKey: { allowedSessions?: string[] | null } | null;
+    let subscriberKey: { effectiveAllowedSessions?: string[] | null } | null;
     try {
       subscriberKey = rawApiKey ? await this.authService.validateApiKey(rawApiKey, clientIp) : null;
     } catch {
@@ -378,7 +379,7 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
     // Enforce per-key session scope against the FRESH key: a key restricted to specific
     // sessions must not subscribe to '*' or a session outside its allowlist (#221).
-    if (!isSessionSubscriptionAllowed(subscriberKey.allowedSessions, sessionId)) {
+    if (!isSessionSubscriptionAllowed(subscriberKey.effectiveAllowedSessions, sessionId)) {
       return this.createError('FORBIDDEN_SESSION', 'API key is not authorized for this session', requestId);
     }
 

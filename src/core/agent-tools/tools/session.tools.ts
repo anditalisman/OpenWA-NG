@@ -19,7 +19,7 @@ export function sessionTools(session: SessionService): AnyToolDescriptor[] {
       }),
       handler: (input, apiKey) =>
         session
-          .findAll(apiKey.allowedSessions, { limit: input.limit, offset: input.offset })
+          .findAll(apiKey.effectiveAllowedSessions, { limit: input.limit, offset: input.offset })
           .then(ss => ss.map(s => SessionResponseDto.fromEntity(s, session.isActive(s.id)))),
     }),
     defineTool({
@@ -48,7 +48,7 @@ export function sessionTools(session: SessionService): AnyToolDescriptor[] {
       description: 'Aggregate session counts (total, active, ready, disconnected) the key is allowed to see.',
       tier: 'read',
       inputSchema: z.object({}),
-      handler: (_input, apiKey) => session.getStats(apiKey.allowedSessions),
+      handler: (_input, apiKey) => session.getStats(apiKey.effectiveAllowedSessions),
     }),
     defineTool({
       name: 'SessionSubscribePresence',

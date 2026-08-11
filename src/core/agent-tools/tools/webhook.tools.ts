@@ -20,7 +20,7 @@ export function webhookTools(webhook: WebhookService): AnyToolDescriptor[] {
       }),
       handler: (input, apiKey) =>
         webhook
-          .findAll(apiKey.allowedSessions, { limit: input.limit, offset: input.offset })
+          .findAll(apiKey.effectiveAllowedSessions, { limit: input.limit, offset: input.offset })
           .then(ws => WebhookResponseDto.fromEntities(ws)),
     }),
     defineTool({

@@ -80,6 +80,15 @@ export class Session {
   @Column({ type: dateColumnType(), nullable: true, transformer: DateTransformer })
   leaseExpiresAt!: Date | null;
 
+  /**
+   * The id of the API key whose POST /sessions call created this row, or null for sessions created
+   * before this column existed (or by an admin key — only non-admin keys ever consult it). No FK:
+   * `api_keys` lives on the separate `main` TypeORM connection, so referential integrity across
+   * connections isn't possible; see AuthService.validateApiKey's effective-session-scope resolution.
+   */
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  createdByApiKeyId!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

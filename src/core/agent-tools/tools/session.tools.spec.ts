@@ -9,7 +9,7 @@ import type { AuthService } from '../../../modules/auth/auth.service';
 
 function makeAuth(): Pick<AuthService, 'validateApiKey' | 'hasPermission'> {
   return {
-    validateApiKey: jest.fn().mockResolvedValue({ id: 'k1', allowedSessions: null }),
+    validateApiKey: jest.fn().mockResolvedValue({ id: 'k1', allowedSessions: null, effectiveAllowedSessions: null }),
     hasPermission: jest.fn().mockReturnValue(true),
   };
 }
@@ -23,7 +23,7 @@ async function run(tool: AnyToolDescriptor, input: unknown): Promise<unknown> {
 }
 
 describe('sessionTools', () => {
-  it('SessionFindAll scopes by the key allowedSessions and maps entities to DTOs', async () => {
+  it('SessionFindAll scopes by the key effectiveAllowedSessions and maps entities to DTOs', async () => {
     const findAll = jest.fn().mockResolvedValue([{ id: 's1', name: 'main', status: 'ready' }]);
     const isActive = jest.fn().mockReturnValue(true);
     const out = (await run(makeTools({ findAll, isActive } as unknown as SessionService).get('SessionFindAll')!, {
@@ -56,7 +56,7 @@ describe('sessionTools', () => {
     expect(out).toEqual([{ id: 'c1' }]);
   });
 
-  it('SessionGetStats scopes by the key allowedSessions', async () => {
+  it('SessionGetStats scopes by the key effectiveAllowedSessions', async () => {
     const stats = { total: 2, active: 1, ready: 1, disconnected: 1 };
     const getStats = jest.fn().mockResolvedValue(stats);
     const out = await run(makeTools({ getStats } as unknown as SessionService).get('SessionGetStats')!, {});

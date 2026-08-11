@@ -51,10 +51,11 @@ export class WebhooksListController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ): Promise<WebhookResponseDto[]> {
-    // Scope to the key's allowedSessions so a session-restricted key cannot enumerate every
-    // session's webhook URLs. A null/empty allowlist (e.g. ADMIN) still sees all.
+    // Scope to the key's *effective* session list (AuthService.validateApiKey): null (ADMIN only)
+    // sees every session's webhooks; a non-admin key otherwise gets its explicit allowedSessions or,
+    // if unscoped, just the sessions it created itself.
     return WebhookResponseDto.fromEntities(
-      await this.webhookService.findAll(apiKey?.allowedSessions, {
+      await this.webhookService.findAll(apiKey?.effectiveAllowedSessions, {
         limit: limit ? parseInt(limit, 10) : undefined,
         offset: offset ? parseInt(offset, 10) : undefined,
       }),
