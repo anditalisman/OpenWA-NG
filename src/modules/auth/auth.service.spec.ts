@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import { AuthService, resolveSeedApiKey, bannerKeyLine } from './auth.service';
 import { ApiKeyUsageTracker } from './api-key-usage-tracker.service';
 import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
+import { Session } from '../session/entities/session.entity';
 
 // Helpers
 const hashKey = (key: string) => createHash('sha256').update(key).digest('hex');
@@ -90,6 +91,7 @@ describe('bannerKeyLine (startup banner key masking)', () => {
 describe('AuthService', () => {
   let service: AuthService;
   let repository: jest.Mocked<Partial<Repository<ApiKey>>>;
+  let sessionRepository: jest.Mocked<Partial<Repository<Session>>>;
 
   beforeEach(async () => {
     repository = {
@@ -102,6 +104,11 @@ describe('AuthService', () => {
       remove: jest.fn(),
       increment: jest.fn(),
     };
+    // Backs resolveEffectiveAllowedSessions()'s "sessions this key created" lookup. Empty by
+    // default (no created-sessions test needs it) — tests exercising that branch override it.
+    sessionRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -110,6 +117,10 @@ describe('AuthService', () => {
         {
           provide: getRepositoryToken(ApiKey, 'main'),
           useValue: repository,
+        },
+        {
+          provide: getRepositoryToken(Session, 'data'),
+          useValue: sessionRepository,
         },
       ],
     }).compile();

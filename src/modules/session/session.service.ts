@@ -186,7 +186,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     await this.ownership?.releaseAll();
   }
 
-  async create(dto: CreateSessionDto): Promise<Session> {
+  async create(dto: CreateSessionDto, createdByApiKeyId?: string): Promise<Session> {
     // Check if session with same name exists
     const existing = await this.sessionRepository.findOne({
       where: { name: dto.name },
@@ -202,6 +202,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       proxyUrl: dto.proxyUrl || null,
       proxyType: dto.proxyType || null,
       status: SessionStatus.CREATED,
+      // Powers AuthService.resolveEffectiveAllowedSessions(): an unscoped non-admin key's visibility
+      // defaults to the sessions it created itself, not every session in the deployment.
+      createdByApiKeyId: createdByApiKeyId ?? null,
     });
 
     // The findOne pre-check above is a fast path for the common case, but it's a check-then-insert
@@ -233,12 +236,18 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }
 
   async findAll(allowedSessions?: string[] | null, opts: ListOptions = {}): Promise<Session[]> {
-    // A session-restricted key only lists its own sessions; an unrestricted key (null/empty
-    // allowlist) lists all — mirroring the ApiKeyGuard allowedSessions model so a scoped key
-    // cannot enumerate every session through this aggregate route.
+    // A session-restricted key only lists its own sessions; an unrestricted key (allowedSessions
+    // null/undefined) lists all — mirroring the ApiKeyGuard allowedSessions model so a scoped key
+    // cannot enumerate every session through this aggregate route. An explicit `[]` (a non-admin
+    // unscoped key with no sessions of its own — see AuthService.resolveEffectiveAllowedSessions)
+    // is NOT the same as null: it must list nothing, so it short-circuits before the query — an
+    // empty `In()`/`IN (:...)` array is a TypeORM/driver footgun best avoided outright.
+    if (allowedSessions != null && allowedSessions.length === 0) {
+      return [];
+    }
     const { limit, offset } = resolveListWindow(opts.limit, opts.offset);
     const options: FindManyOptions<Session> = { order: { createdAt: 'DESC' }, take: limit, skip: offset };
-    if (allowedSessions && allowedSessions.length > 0) {
+    if (allowedSessions != null) {
       options.where = { id: In(allowedSessions) };
     }
     const sessions = await this.sessionRepository.find(options);
@@ -630,7 +639,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }> {
     // Scope to the caller's allowedSessions so a session-restricted key cannot enumerate the count /
     // status distribution of sessions it has no rights to (matches the scoped GET /sessions route).
-    const scope = allowedSessions && allowedSessions.length > 0 ? allowedSessions : null;
+    // null/undefined = unrestricted; an explicit `[]` (non-admin unscoped, no sessions of its own —
+    // see AuthService.resolveEffectiveAllowedSessions) means zero, NOT unrestricted, so it must stay
+    // a distinct `[]` here rather than collapsing to null.
+    const scope = allowedSessions != null ? allowedSessions : null;
     // Aggregate status counts in the database instead of loading every row. findAll() is bounded by
     // DEFAULT_LIST_LIMIT for the HTTP routes, so reusing it here would silently undercount `total` and
     // `byStatus` on deployments with more sessions than that cap. A grouped COUNT is correct at any
@@ -639,8 +651,12 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       .createQueryBuilder('session')
       .select('session.status', 'status')
       .addSelect('COUNT(session.id)', 'count');
-    if (scope) {
+    // An empty `IN (:...)` is a TypeORM/driver footgun, so a `[]` scope short-circuits: zero rows,
+    // same end result, no query needed at all.
+    if (scope && scope.length > 0) {
       qb.where('session.id IN (:...scope)', { scope });
+    } else if (scope) {
+      qb.where('1 = 0');
     }
     const rows = await qb.groupBy('session.status').getRawMany<{ status: string; count: string }>();
 

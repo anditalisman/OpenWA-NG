@@ -53,4 +53,20 @@ export class ApiKey {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  /**
+   * Transient (non-persisted) resolved session scope, computed once per validation by
+   * AuthService.validateApiKey — never read from or written to the database. Deliberately kept
+   * separate from `allowedSessions` (the raw, admin-configured column): `allowedSessions` alone still
+   * drives @RequireUnscopedKey() (an operator who has already created sessions must still look
+   * "unscoped" to create another one) and the last-usable-admin invariant. `effectiveAllowedSessions`
+   * is what every session-VISIBILITY check (session-scope.ts, SessionService.findAll/getStats, the
+   * webhook/audit/integration-instance/search/agent-tools scoping, EventsGateway subscriptions) should
+   * read instead: for an ADMIN key it mirrors `allowedSessions` (null = every session, unchanged
+   * behaviour); for a non-admin key with no explicit `allowedSessions`, it resolves to the ids of
+   * sessions this same key created (Session.createdByApiKeyId) rather than "every session in the
+   * deployment"; a non-admin key with an explicit `allowedSessions` keeps that admin-configured list
+   * untouched.
+   */
+  effectiveAllowedSessions?: string[] | null;
 }

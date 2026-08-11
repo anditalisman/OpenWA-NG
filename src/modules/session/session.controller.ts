@@ -69,8 +69,8 @@ export class SessionController {
     type: SessionResponseDto,
   })
   @ApiResponse({ status: 409, description: 'Session name already exists' })
-  async create(@Body() dto: CreateSessionDto): Promise<SessionResponseDto> {
-    const session = await this.sessionService.create(dto);
+  async create(@Body() dto: CreateSessionDto, @CurrentApiKey() apiKey?: ApiKey): Promise<SessionResponseDto> {
+    const session = await this.sessionService.create(dto, apiKey?.id);
     await this.auditService.logInfo(AuditAction.SESSION_CREATED, {
       sessionId: session.id,
       sessionName: session.name,
@@ -92,9 +92,10 @@ export class SessionController {
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ): Promise<SessionResponseDto[]> {
-    // Scope to the key's allowedSessions so a session-restricted key cannot enumerate every
-    // session. A null/empty allowlist (e.g. ADMIN) still lists all.
-    const sessions = await this.sessionService.findAll(apiKey?.allowedSessions, {
+    // Scope to the key's *effective* session list (AuthService.validateApiKey): null (ADMIN only)
+    // lists every session; a non-admin key gets its explicit allowedSessions, or — if unscoped —
+    // just the sessions it created itself.
+    const sessions = await this.sessionService.findAll(apiKey?.effectiveAllowedSessions, {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
@@ -662,6 +663,6 @@ export class SessionController {
   }> {
     // Scope aggregate stats to the key's allowedSessions so a session-restricted key cannot enumerate
     // global session counts/status (the route carries no :id for the guard to scope against).
-    return this.sessionService.getStats(apiKey?.allowedSessions);
+    return this.sessionService.getStats(apiKey?.effectiveAllowedSessions);
   }
 }

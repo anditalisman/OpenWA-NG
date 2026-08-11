@@ -75,9 +75,12 @@ describe('WebhookService session-scoped access', () => {
     await expect(service.test('sessA', whB.id)).rejects.toThrow(NotFoundException);
   });
 
-  it('findAll scopes to allowedSessions when set, returns all when unrestricted', async () => {
+  it('findAll scopes to allowedSessions when set, returns all when unrestricted (null)', async () => {
     expect((await service.findAll(['sessA'])).map(w => w.id)).toEqual([whA.id]);
     expect((await service.findAll(null)).map(w => w.id).sort()).toEqual([whA.id, whB.id].sort());
-    expect((await service.findAll([])).length).toBe(2); // empty allowlist = unrestricted (matches the guard)
+  });
+
+  it('findAll returns nothing for an explicit empty allowlist (non-admin unscoped key that owns no sessions)', async () => {
+    expect((await service.findAll([])).length).toBe(0);
   });
 });

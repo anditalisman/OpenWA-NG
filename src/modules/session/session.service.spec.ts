@@ -687,6 +687,26 @@ describe('SessionService', () => {
 
       await expect(service.create({ name: 'test-session' })).rejects.toThrow(ConflictException);
     });
+
+    it('records which API key created the session (powers AuthService.resolveEffectiveAllowedSessions)', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+      (repository.create as jest.Mock).mockReturnValue(createMockSession());
+      (repository.save as jest.Mock).mockResolvedValue(createMockSession());
+
+      await service.create({ name: 'test-session' }, 'key-42');
+
+      expect(repository.create).toHaveBeenCalledWith(expect.objectContaining({ createdByApiKeyId: 'key-42' }));
+    });
+
+    it('leaves createdByApiKeyId null when no creating key is supplied', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(null);
+      (repository.create as jest.Mock).mockReturnValue(createMockSession());
+      (repository.save as jest.Mock).mockResolvedValue(createMockSession());
+
+      await service.create({ name: 'test-session' });
+
+      expect(repository.create).toHaveBeenCalledWith(expect.objectContaining({ createdByApiKeyId: null }));
+    });
   });
 
   // ── findAll / findOne ─────────────────────────────────────────────
@@ -715,15 +735,22 @@ describe('SessionService', () => {
       });
     });
 
-    it('returns all sessions for an unrestricted key (null/empty allowlist)', async () => {
+    it('returns all sessions for an unrestricted key (null/undefined allowlist)', async () => {
       (repository.find as jest.Mock).mockResolvedValue([]);
 
       await service.findAll(null);
-      await service.findAll([]);
+      await service.findAll(undefined);
 
       expect(repository.find).toHaveBeenCalledTimes(2);
       expect(repository.find).toHaveBeenNthCalledWith(1, { order: { createdAt: 'DESC' }, take: 1000, skip: 0 });
       expect(repository.find).toHaveBeenNthCalledWith(2, { order: { createdAt: 'DESC' }, take: 1000, skip: 0 });
+    });
+
+    it('returns nothing for an explicit empty allowlist, without querying (non-admin key that owns no sessions)', async () => {
+      const result = await service.findAll([]);
+
+      expect(result).toEqual([]);
+      expect(repository.find).not.toHaveBeenCalled();
     });
 
     it('applies bounded pagination to the database query', async () => {

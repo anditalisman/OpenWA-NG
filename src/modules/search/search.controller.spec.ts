@@ -28,22 +28,30 @@ describe('SearchController', () => {
     expect(search).not.toHaveBeenCalled();
   });
 
-  it('returns results and forwards the key allowedSessions as callerSessionIds', async () => {
+  it('returns results and forwards the key effectiveAllowedSessions as callerSessionIds', async () => {
     search.mockResolvedValue(ok);
-    const apiKey = { allowedSessions: ['s1', 's2'] } as unknown as ApiKey;
+    const apiKey = { effectiveAllowedSessions: ['s1', 's2'] } as unknown as ApiKey;
     const dto: SearchQueryDto = { q: 'hello', limit: 5 };
     const res = await ctrl.search(dto, apiKey);
     expect(search).toHaveBeenCalledWith(dto, ['s1', 's2']);
     expect(res).toBe(ok);
   });
 
-  it('passes undefined (no scope) for an unrestricted key (null allowedSessions)', async () => {
+  it('passes undefined (no scope) for an unrestricted key (null effectiveAllowedSessions — ADMIN only)', async () => {
     search.mockResolvedValue(ok);
-    // A null/empty allowlist (e.g. ADMIN) sees all sessions — mirrors GET /webhooks behavior.
-    const apiKey = { allowedSessions: null } as unknown as ApiKey;
+    // null (ADMIN only) sees all sessions — mirrors GET /webhooks behavior.
+    const apiKey = { effectiveAllowedSessions: null } as unknown as ApiKey;
     const dto: SearchQueryDto = { q: 'hello' };
     await ctrl.search(dto, apiKey);
     expect(search).toHaveBeenCalledWith(dto, undefined);
+  });
+
+  it('searches nothing for a non-admin unscoped key that owns no sessions (empty effectiveAllowedSessions)', async () => {
+    search.mockResolvedValue(ok);
+    const apiKey = { effectiveAllowedSessions: [] } as unknown as ApiKey;
+    const dto: SearchQueryDto = { q: 'hello' };
+    await ctrl.search(dto, apiKey);
+    expect(search).toHaveBeenCalledWith(dto, []);
   });
 
   it('derives callerSessionIds only from the key, never from the query (anti-smuggling)', async () => {

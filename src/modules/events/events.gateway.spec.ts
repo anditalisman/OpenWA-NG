@@ -9,13 +9,15 @@ import type { WSClientMessage, WSErrorResponse, WSSubscribedResponse, WSEventMes
 import { WEBHOOK_RESERVED_EVENTS } from '../webhook/dto/webhook.dto';
 
 describe('isSessionSubscriptionAllowed (WS session-scope enforcement)', () => {
-  it('allows an unrestricted key (null allowedSessions) to subscribe to anything, including *', () => {
+  it('allows an unrestricted key (null/undefined effective scope) to subscribe to anything, including *', () => {
     expect(isSessionSubscriptionAllowed(null, '*')).toBe(true);
     expect(isSessionSubscriptionAllowed(null, 'sess-1')).toBe(true);
+    expect(isSessionSubscriptionAllowed(undefined, '*')).toBe(true);
   });
 
-  it('allows an unrestricted key (empty allowedSessions) to subscribe to *', () => {
-    expect(isSessionSubscriptionAllowed([], '*')).toBe(true);
+  it('forbids an explicit empty scope (non-admin unscoped key that owns no sessions) from subscribing to anything', () => {
+    expect(isSessionSubscriptionAllowed([], '*')).toBe(false);
+    expect(isSessionSubscriptionAllowed([], 'sess-1')).toBe(false);
   });
 
   it('forbids a session-scoped key from subscribing to the * wildcard', () => {
@@ -104,7 +106,7 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('accepts a valid key via handshake.auth and stores the raw key for re-validation', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null, effectiveAllowedSessions: null });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
     expect(sock.disconnect).not.toHaveBeenCalled();
@@ -112,7 +114,11 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('re-validates on subscribe and disconnects a key revoked after connect', async () => {
-    authService.validateApiKey.mockResolvedValueOnce({ name: 'k', allowedSessions: null }); // connect
+    authService.validateApiKey.mockResolvedValueOnce({
+      name: 'k',
+      allowedSessions: null,
+      effectiveAllowedSessions: null,
+    }); // connect
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -124,7 +130,7 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('allows subscribe when the key still re-validates', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null, effectiveAllowedSessions: null });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -138,7 +144,7 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('accepts a subscription to group.join (a live, engine-emitted event)', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null, effectiveAllowedSessions: null });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -153,7 +159,7 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('rejects a subscription to an unknown, never-emitted event with INVALID_EVENTS', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null, effectiveAllowedSessions: null });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -168,7 +174,7 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('keeps the valid events when a subscription mixes a valid and an unknown event', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: null, effectiveAllowedSessions: null });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -186,7 +192,11 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   // The pure predicate is covered above; these drive it through handleSubscribe so a regression that
   // drops the check (or reads the stale connect-time key) is caught end-to-end.
   it('forbids a session-scoped key from subscribing to a session outside its allowlist', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: ['sess-1'] });
+    authService.validateApiKey.mockResolvedValue({
+      name: 'k',
+      allowedSessions: ['sess-1'],
+      effectiveAllowedSessions: ['sess-1'],
+    });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -198,7 +208,11 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('forbids a session-scoped key from subscribing to the * wildcard', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: ['sess-1'] });
+    authService.validateApiKey.mockResolvedValue({
+      name: 'k',
+      allowedSessions: ['sess-1'],
+      effectiveAllowedSessions: ['sess-1'],
+    });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -212,7 +226,11 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('allows a session-scoped key to subscribe to a session in its allowlist', async () => {
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: ['sess-1'] });
+    authService.validateApiKey.mockResolvedValue({
+      name: 'k',
+      allowedSessions: ['sess-1'],
+      effectiveAllowedSessions: ['sess-1'],
+    });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
@@ -227,11 +245,19 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
 
   it('enforces scope using the FRESH re-validated key, not the connect-time key', async () => {
     // Connect with an unrestricted key, but the key is narrowed to ['sess-1'] by the subscribe re-check.
-    authService.validateApiKey.mockResolvedValueOnce({ name: 'k', allowedSessions: null }); // connect
+    authService.validateApiKey.mockResolvedValueOnce({
+      name: 'k',
+      allowedSessions: null,
+      effectiveAllowedSessions: null,
+    }); // connect
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
 
-    authService.validateApiKey.mockResolvedValueOnce({ name: 'k', allowedSessions: ['sess-1'] }); // subscribe re-check
+    authService.validateApiKey.mockResolvedValueOnce({
+      name: 'k',
+      allowedSessions: ['sess-1'],
+      effectiveAllowedSessions: ['sess-1'],
+    }); // subscribe re-check
     const res = (await gateway.handleMessage(
       asSocket(sock),
       subscribeMsg('sess-2', ['message.received']),
@@ -246,7 +272,12 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   // set but no clientIp is supplied — so the gateway must pass the trusted-proxy-aware IP at connect
   // and at subscribe re-validation. Without the fix every IP-restricted key was locked out of WS.
   it('passes the trusted-proxy-aware client IP to validateApiKey at connect (RED-without-fix: undefined)', async () => {
-    authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({
+      id: 'k1',
+      name: 'k',
+      allowedSessions: null,
+      effectiveAllowedSessions: null,
+    });
     const sock = makeSocket({ apiKey: 'good' }); // address defaults to 203.0.113.5
     await gateway.handleConnection(asSocket(sock));
     expect(authService.validateApiKey).toHaveBeenCalledWith('good', '203.0.113.5');
@@ -254,7 +285,12 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   });
 
   it('passes the resolved client IP to validateApiKey on subscribe re-validation', async () => {
-    authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+    authService.validateApiKey.mockResolvedValue({
+      id: 'k1',
+      name: 'k',
+      allowedSessions: null,
+      effectiveAllowedSessions: null,
+    });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
     authService.validateApiKey.mockClear();
@@ -266,7 +302,12 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
     const prev = process.env.TRUSTED_PROXIES;
     process.env.TRUSTED_PROXIES = '10.0.0.1';
     try {
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const sock = makeSocket({ apiKey: 'good' });
       sock.handshake.address = '10.0.0.1'; // immediate peer is the trusted proxy
       sock.handshake.headers['x-forwarded-for'] = '198.51.100.7';
@@ -281,7 +322,12 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
   // with a clean close (an UNAUTHORIZED reason) rather than lingering until natural disconnect.
   describe('evictApiKey (revoke/disable socket teardown)', () => {
     it('disconnects every active socket authenticated with the revoked key', async () => {
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const sock = makeSocket({ apiKey: 'good' });
       await gateway.handleConnection(asSocket(sock));
       expect(sock.disconnect).not.toHaveBeenCalled();
@@ -293,7 +339,12 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
     });
 
     it('does NOT evict sockets authenticated with a different (still-active) key', async () => {
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const sock = makeSocket({ apiKey: 'good' });
       await gateway.handleConnection(asSocket(sock));
 
@@ -307,7 +358,12 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
     });
 
     it('cleans up tracking on disconnect so an evicted key holds no stale socket refs', async () => {
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const sock = makeSocket({ apiKey: 'good' });
       await gateway.handleConnection(asSocket(sock));
 
@@ -324,6 +380,7 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
         id: 'k1',
         name: 'k',
         allowedSessions: null,
+        effectiveAllowedSessions: null,
         expiresAt: new Date('2026-01-01T00:00:00Z'),
       });
       const sock = makeSocket({ apiKey: 'good' });
@@ -344,11 +401,18 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
       const noExpiry = makeSocket({ apiKey: 'a' });
       const future = { ...makeSocket({ apiKey: 'b' }), id: 'sock-2' };
       authService.validateApiKey
-        .mockResolvedValueOnce({ id: 'k1', name: 'a', allowedSessions: null, expiresAt: null })
+        .mockResolvedValueOnce({
+          id: 'k1',
+          name: 'a',
+          allowedSessions: null,
+          effectiveAllowedSessions: null,
+          expiresAt: null,
+        })
         .mockResolvedValueOnce({
           id: 'k2',
           name: 'b',
           allowedSessions: null,
+          effectiveAllowedSessions: null,
           expiresAt: new Date('2026-01-02T00:00:00Z'),
         });
       await gateway.handleConnection(asSocket(noExpiry));
@@ -517,7 +581,12 @@ describe('EventsGateway rate limiting', () => {
     it('rejects the frame above the bucket with a RATE_LIMITED error frame and never reaches the handler', async () => {
       process.env.WS_RATE_LIMIT_FRAME_PER_SECOND = '2';
       process.env.WS_RATE_LIMIT_FRAME_BURST = '3';
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const gw = buildGateway();
       const sock = makeSock('s1', { apiKey: 'good' });
       await gw.handleConnection(asSocket(sock));
@@ -546,7 +615,12 @@ describe('EventsGateway rate limiting', () => {
 
     it('lets a normal dashboard connect-time subscribe burst (8 frames) through untouched', async () => {
       // Defaults: 60 frames/s sustained + 120 burst — far above a page-mount burst.
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const gw = buildGateway();
       const sock = makeSock('s1', { apiKey: 'good' });
       await gw.handleConnection(asSocket(sock));
@@ -563,7 +637,12 @@ describe('EventsGateway rate limiting', () => {
       process.env.WS_RATE_LIMIT_FRAME_PER_SECOND = '2';
       process.env.WS_RATE_LIMIT_FRAME_BURST = '2';
       jest.useFakeTimers();
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const gw = buildGateway();
       const sock = makeSock('s1', { apiKey: 'good' });
       await gw.handleConnection(asSocket(sock));
@@ -640,7 +719,12 @@ describe('EventsGateway rate limiting', () => {
       process.env.WS_RATE_LIMIT_HANDSHAKE_MAX = '2';
       process.env.WS_RATE_LIMIT_HANDSHAKE_WINDOW_MS = '60000';
       process.env.WS_MAX_SOCKETS_PER_KEY = '99';
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const gw = buildGateway();
 
       for (let i = 0; i < 6; i++) {
@@ -716,7 +800,12 @@ describe('EventsGateway rate limiting', () => {
       process.env.WS_MAX_SOCKETS_PER_KEY = '2';
       // Keep the handshake window out of the way: this test is about the socket cap.
       process.env.WS_RATE_LIMIT_HANDSHAKE_MAX = '100';
-      authService.validateApiKey.mockResolvedValue({ id: 'k1', name: 'k', allowedSessions: null });
+      authService.validateApiKey.mockResolvedValue({
+        id: 'k1',
+        name: 'k',
+        allowedSessions: null,
+        effectiveAllowedSessions: null,
+      });
       const gw = buildGateway();
 
       const s1 = makeSock('s1', { apiKey: 'good' });

@@ -280,10 +280,15 @@ export class WebhookService implements OnModuleInit, OnModuleDestroy {
 
   async findAll(allowedSessions?: string[] | null, opts: ListOptions = {}): Promise<Webhook[]> {
     // A session-restricted key only sees its own sessions' webhooks; an unrestricted key
-    // (null/empty allowlist, e.g. ADMIN) sees all — mirroring the ApiKeyGuard allowedSessions model.
+    // (allowedSessions null/undefined, e.g. ADMIN) sees all — mirroring the ApiKeyGuard
+    // allowedSessions model. An explicit `[]` (a non-admin unscoped key with no sessions of its
+    // own) is NOT the same as null: it must see nothing, so it short-circuits before the query.
+    if (allowedSessions != null && allowedSessions.length === 0) {
+      return [];
+    }
     const { limit, offset } = resolveListWindow(opts.limit, opts.offset);
     const options: FindManyOptions<Webhook> = { order: { createdAt: 'DESC' }, take: limit, skip: offset };
-    if (allowedSessions && allowedSessions.length > 0) {
+    if (allowedSessions != null) {
       options.where = { sessionId: In(allowedSessions) };
     }
     return this.webhookRepository.find(options);
