@@ -9851,7 +9851,8 @@
                   "value": "invoice"
                 }
               ]
-            }
+            },
+            "nullable": true
           },
           "retryCount": {
             "type": "number",
@@ -9901,7 +9902,8 @@
                   "value": "invoice"
                 }
               ]
-            }
+            },
+            "nullable": true
           },
           "active": {
             "type": "boolean"
@@ -10001,7 +10003,8 @@
                   "value": "invoice"
                 }
               ]
-            }
+            },
+            "nullable": true
           },
           "active": {
             "type": "boolean",
