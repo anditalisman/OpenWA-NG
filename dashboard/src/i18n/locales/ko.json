@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "OpenWA PAMGM",
     "loading": "로딩 중...",
     "cancel": "취소",
     "delete": "삭제",
