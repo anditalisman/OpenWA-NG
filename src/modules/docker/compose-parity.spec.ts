@@ -101,12 +101,18 @@ async function capture(profile: string): Promise<CapturedConfig> {
 
 /**
  * Regression lock: the Docker-API orchestration path (DockerService.getContainerSpec) must stay
- * in parity with the equivalent services in docker-compose.yml. Reads the real compose file so a
- * drift on EITHER side fails here. Deliberate differences (built-in credentials, the postgres
+ * in parity with the equivalent services in docker-compose.full.yml. Reads the real compose file so
+ * a drift on EITHER side fails here. Deliberate differences (built-in credentials, the postgres
  * init-script mount) are locked too — see the getContainerSpec docblock for the rationale.
+ *
+ * Reads docker-compose.full.yml, NOT the default docker-compose.yml: this fork's default compose
+ * is the trimmed PAMGM variant (no built-in postgres/minio — PAMGM always uses an external
+ * Postgres and never uses S3/MinIO), but DockerService.getContainerSpec still supports
+ * orchestrating those profiles for anyone who re-enables them, so docker-compose.full.yml is kept
+ * as the reference those code paths are checked against.
  */
-describe('DockerService managed specs ↔ docker-compose.yml parity', () => {
-  const compose = yaml.load(readFileSync(join(__dirname, '../../../docker-compose.yml'), 'utf8')) as ComposeFile;
+describe('DockerService managed specs ↔ docker-compose.full.yml parity', () => {
+  const compose = yaml.load(readFileSync(join(__dirname, '../../../docker-compose.full.yml'), 'utf8')) as ComposeFile;
 
   // getContainerSpec reads the S3 credential env vars at call time; scrub them so the
   // default-fallback assertions don't depend on the developer's shell.
