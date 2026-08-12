@@ -98,6 +98,16 @@ describe('SelfServiceApiKeyService', () => {
       expect(mailService.send).not.toHaveBeenCalled();
       expect(await ds.getRepository(SelfServiceKeyRequest).count()).toBe(0);
     });
+
+    it('surfaces a 503 (not a raw 500) and rolls back the row when the verification email fails to send', async () => {
+      mailService.send.mockRejectedValueOnce(new Error('550 5.1.0 Sender address rejected: User unknown'));
+
+      await expect(service.requestKey({ name: 'Budi', email: 'budi@ptamgirimenang.com' })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      expect(await ds.getRepository(SelfServiceKeyRequest).count()).toBe(0);
+    });
   });
 
   describe('verifyAndIssue', () => {
