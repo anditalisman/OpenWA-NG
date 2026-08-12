@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, Languages } from 'lucide-react';
-import { GithubIcon } from '../components/GithubIcon';
 import { CustomSelect } from '../components/CustomSelect';
 import { languageOptions, resolveSupportedLanguage, type SupportedLanguage } from '../i18n';
 import { API_BASE_URL } from '../services/api';
@@ -110,24 +109,15 @@ export function Login({ onLogin }: LoginProps) {
 
         <p className="login-help">
           {t('login.help')}{' '}
-          <a href="https://docs.open-wa.org" target="_blank" rel="noopener noreferrer">
+          <a
+            href="https://claude.ai/code/artifact/0485d151-a6dc-4d00-a7d9-58f27017a2f0"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             {t('login.viewDocs')}
           </a>
         </p>
       </div>
-
-      <footer className="login-footer">
-        <span>{t('login.footer')}</span>
-        <a
-          href="https://github.com/rmyndharis/OpenWA"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="github-link"
-          aria-label="GitHub"
-        >
-          <GithubIcon size={18} />
-        </a>
-      </footer>
     </div>
   );
 }
