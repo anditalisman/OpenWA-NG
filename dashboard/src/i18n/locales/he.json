@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "OpenWA PAMGM",
     "loading": "טוען...",
     "cancel": "ביטול",
     "delete": "מחיקה",
@@ -183,7 +183,6 @@
     "connectionError": "לא ניתן להתחבר לשרת. יש לנסות שוב.",
     "help": "צריך עזרה?",
     "viewDocs": "לצפייה בתיעוד",
-    "footer": "נבנה באהבה על ידי Yudhi Armyndharis וקהילת OpenWA",
     "version": "v{{version}} · {{date}}"
   },
   "dashboard": {

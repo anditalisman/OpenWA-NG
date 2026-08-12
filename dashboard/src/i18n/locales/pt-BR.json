@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "OpenWA PAMGM",
     "loading": "Carregando...",
     "cancel": "Cancelar",
     "delete": "Excluir",
@@ -176,7 +176,6 @@
     "connectionError": "Não foi possível conectar ao servidor. Por favor, tente novamente.",
     "help": "Precisa de ajuda?",
     "viewDocs": "Ver documentação",
-    "footer": "Feito com ❤️ por Yudhi Armyndharis e a comunidade OpenWA",
     "version": "v{{version}} · {{date}}"
   },
   "dashboard": {
