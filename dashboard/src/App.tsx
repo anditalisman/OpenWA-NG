@@ -13,6 +13,8 @@ import { clearActorState, resolveStartupValidation } from './utils/authLifecycle
 import './App.css';
 
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const RequestApiKey = lazy(() => import('./pages/RequestApiKey').then(m => ({ default: m.RequestApiKey })));
+const VerifyApiKey = lazy(() => import('./pages/VerifyApiKey').then(m => ({ default: m.VerifyApiKey })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Sessions = lazy(() => import('./pages/Sessions').then(m => ({ default: m.Sessions })));
 const Chats = lazy(() => import('./pages/Chats').then(m => ({ default: m.Chats })));
@@ -102,32 +104,32 @@ function AppContent() {
     </div>
   );
 
-  if (!isAuthenticated) {
-    return (
-      <Suspense fallback={loadingFallback}>
-        <Login onLogin={handleLogin} />
-      </Suspense>
-    );
-  }
-
   return (
     <ToastProvider>
       <BrowserRouter>
         <Suspense fallback={loadingFallback}>
           <Routes>
-            <Route path="/" element={<Layout onLogout={handleLogout} userRole={role} />}>
-              <Route index element={<Dashboard />} />
-              <Route path="sessions" element={<Sessions />} />
-              <Route path="chats" element={<Chats />} />
-              <Route path="webhooks" element={<Webhooks />} />
-              <Route path="templates" element={<Templates />} />
-              {role === 'admin' && <Route path="api-keys" element={<ApiKeys />} />}
-              <Route path="logs" element={<Logs />} />
-              <Route path="message-tester" element={<MessageTester />} />
-              {role === 'admin' && <Route path="infrastructure" element={<Infrastructure />} />}
-              {role === 'admin' && <Route path="plugins" element={<Plugins />} />}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Route>
+            {/* Reachable whether or not a key is stored — someone requesting their first key has
+                none yet, and the emailed verify link must work in a fresh/incognito tab. */}
+            <Route path="/request-api-key" element={<RequestApiKey />} />
+            <Route path="/verify-api-key" element={<VerifyApiKey />} />
+            {isAuthenticated ? (
+              <Route path="/" element={<Layout onLogout={handleLogout} userRole={role} />}>
+                <Route index element={<Dashboard />} />
+                <Route path="sessions" element={<Sessions />} />
+                <Route path="chats" element={<Chats />} />
+                <Route path="webhooks" element={<Webhooks />} />
+                <Route path="templates" element={<Templates />} />
+                {role === 'admin' && <Route path="api-keys" element={<ApiKeys />} />}
+                <Route path="logs" element={<Logs />} />
+                <Route path="message-tester" element={<MessageTester />} />
+                {role === 'admin' && <Route path="infrastructure" element={<Infrastructure />} />}
+                {role === 'admin' && <Route path="plugins" element={<Plugins />} />}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            ) : (
+              <Route path="*" element={<Login onLogin={handleLogin} />} />
+            )}
           </Routes>
         </Suspense>
       </BrowserRouter>

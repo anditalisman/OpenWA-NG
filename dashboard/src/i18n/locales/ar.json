@@ -42,7 +42,8 @@
     "refresh": "تحديث",
     "errorGeneric": "حدث خطأ",
     "unknownError": "خطأ غير معروف",
-    "retry": "إعادة المحاولة"
+    "retry": "إعادة المحاولة",
+    "copy": "نسخ"
   },
   "theme": {
     "light": "فاتح",
@@ -187,7 +188,29 @@
     "connectionError": "تعذّر الاتصال بالخادم. يرجى المحاولة مرة أخرى.",
     "help": "هل تحتاج مساعدة؟",
     "viewDocs": "عرض التوثيق",
+    "requestApiKey": "ليس لديك مفتاح API؟ اطلب واحدًا",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "طلب مفتاح API",
+    "subtitle": "أدخل اسمك وبريدك الإلكتروني للعمل — سنرسل رابط تحقق لإصدار مفتاحك.",
+    "nameLabel": "اسمك",
+    "namePlaceholder": "مثال: Budi Santoso",
+    "emailLabel": "البريد الإلكتروني للعمل",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "الاسم والبريد الإلكتروني مطلوبان",
+    "submit": "إرسال بريد التحقق",
+    "submitting": "جارٍ الإرسال...",
+    "submittedTitle": "تحقق من بريدك الإلكتروني",
+    "submittedBody": "إذا كان {{email}} مؤهلاً، فسيتم إرسال رابط تحقق. انقر عليه لتلقي مفتاح API الخاص بك.",
+    "backToLogin": "العودة إلى تسجيل الدخول"
+  },
+  "verifyApiKey": {
+    "verifying": "جارٍ التحقق من الرابط...",
+    "successTitle": "مفتاح API الخاص بك جاهز",
+    "successBody": "انسخه الآن — لن يتم عرضه مرة أخرى.",
+    "errorTitle": "فشل التحقق",
+    "missingToken": "هذا الرابط يفتقد رمز التحقق."
   },
   "dashboard": {
     "title": "لوحة التحكم",

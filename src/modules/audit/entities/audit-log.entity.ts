@@ -8,6 +8,10 @@ export enum AuditAction {
   API_KEY_REVOKED = 'api_key_revoked',
   API_KEY_DELETED = 'api_key_deleted',
   API_KEY_AUTH_FAILED = 'api_key_auth_failed',
+  // Self-service key issuance (no admin in the loop — gated by email-domain allow-list + a
+  // single-use verification link instead).
+  API_KEY_SELF_SERVICE_REQUESTED = 'api_key_self_service_requested',
+  API_KEY_SELF_SERVICE_ISSUED = 'api_key_self_service_issued',
 
   // Rate-limit enforcement (sampled: at most one row per subject+kind per minute — see
   // EventsGateway — so enforcing a limit never becomes an audit-write flood of its own).

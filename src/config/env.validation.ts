@@ -144,6 +144,7 @@ export function validateEnv(config: EnvConfig): EnvConfig {
   checkPort('PORT');
   checkPort('DATABASE_PORT');
   checkPort('REDIS_PORT');
+  checkPort('SMTP_PORT');
 
   // Other numeric knobs: a non-integer (e.g. `RATE_LIMIT_SHORT_LIMIT=abc`) parses to NaN downstream,
   // which silently disables the corresponding limit/timeout. Reject at boot instead of coercing.
@@ -218,6 +219,8 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     'SESSION_LEASE_HEARTBEAT_MS',
     'SESSION_TAKEOVER_SWEEP_MS',
     'SESSION_PROXY_TIMEOUT_MS',
+    // 0 would issue a token that is already expired the instant it's emailed.
+    'SELF_SERVICE_TOKEN_TTL_MINUTES',
   ]) {
     checkPositiveInt(key);
   }
@@ -333,6 +336,10 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     'POSTGRES_BUILTIN',
     'REDIS_BUILTIN',
     'MINIO_BUILTIN',
+    // Read with `=== 'true'` by SelfServiceApiKeyService / MailService: a typo silently leaves the
+    // self-service key flow off, or (for SMTP_SECURE) sends over what the operator believes is TLS.
+    'SELF_SERVICE_API_KEYS_ENABLED',
+    'SMTP_SECURE',
     // Perf/observability only, but same silent-typo class.
     'CACHE_ENABLED',
     'DATABASE_LOGGING',
@@ -380,6 +387,33 @@ export function validateEnv(config: EnvConfig): EnvConfig {
   const provider = config['SEARCH_PROVIDER'] as string | undefined;
   if (provider !== undefined && provider !== '' && !['auto', 'builtin-fts', 'none'].includes(provider)) {
     errors.push(`SEARCH_PROVIDER must be one of: auto, builtin-fts, none (got ${JSON.stringify(provider)})`);
+  }
+
+  // Self-service API key requests send a real email carrying a login-equivalent credential, so the
+  // feature is only meaningful with SMTP actually configured, an allow-list narrowing who can mint a
+  // key with no admin in the loop, and a base URL to build the verification link against — without
+  // this guard, turning the flag on with any of those missing would boot fine and then either throw
+  // on the first request (SMTP_HOST/SMTP_FROM missing, see MailService) or silently issue keys to
+  // every email address on the internet (no allow-list) or email a broken localhost link (no URL).
+  if (str('SELF_SERVICE_API_KEYS_ENABLED') === 'true') {
+    if (!str('SMTP_HOST')) {
+      errors.push('SMTP_HOST is required when SELF_SERVICE_API_KEYS_ENABLED=true');
+    }
+    if (!str('SMTP_FROM')) {
+      errors.push('SMTP_FROM is required when SELF_SERVICE_API_KEYS_ENABLED=true');
+    }
+    if (!str('SELF_SERVICE_ALLOWED_EMAIL_DOMAINS')) {
+      errors.push(
+        'SELF_SERVICE_ALLOWED_EMAIL_DOMAINS is required when SELF_SERVICE_API_KEYS_ENABLED=true ' +
+          '(comma-separated list, e.g. "example.com"); without it every email address could self-issue a key',
+      );
+    }
+    if (!str('DASHBOARD_URL') && !str('BASE_URL')) {
+      errors.push(
+        'DASHBOARD_URL (or BASE_URL) is required when SELF_SERVICE_API_KEYS_ENABLED=true, to build the ' +
+          'verification link sent by email',
+      );
+    }
   }
 
   if (errors.length > 0) {

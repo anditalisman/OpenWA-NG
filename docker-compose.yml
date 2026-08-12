@@ -215,6 +215,22 @@ services:
       - REDIS_ENABLED=${REDIS_ENABLED:-}
       - REDIS_HOST=${REDIS_HOST:-}
       - REDIS_PORT=${REDIS_PORT:-}
+      # Advertised base URL — the startup banner, ingress URLs, and (below) the self-service
+      # verification email link all use this. Forwarded explicitly: without this line, setting
+      # either in .env does nothing under compose (#the same class of gap as the blocks above).
+      - BASE_URL=${BASE_URL:-}
+      - DASHBOARD_URL=${DASHBOARD_URL:-}
+      # Self-service API key requests (opt-in, off unless explicitly enabled). Forwarded explicitly
+      # for the same reason as the chat-media/send-pacing blocks above.
+      - SELF_SERVICE_API_KEYS_ENABLED=${SELF_SERVICE_API_KEYS_ENABLED:-}
+      - SELF_SERVICE_ALLOWED_EMAIL_DOMAINS=${SELF_SERVICE_ALLOWED_EMAIL_DOMAINS:-}
+      - SELF_SERVICE_TOKEN_TTL_MINUTES=${SELF_SERVICE_TOKEN_TTL_MINUTES:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_SECURE=${SMTP_SECURE:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
       # Webhook
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-10000}
       - WEBHOOK_RETRY_DELAY=${WEBHOOK_RETRY_DELAY:-5000}

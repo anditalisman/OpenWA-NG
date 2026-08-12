@@ -42,7 +42,8 @@
     "refresh": "Refresh",
     "errorGeneric": "An error occurred",
     "unknownError": "Unknown error",
-    "retry": "Retry"
+    "retry": "Retry",
+    "copy": "Copy"
   },
   "theme": {
     "light": "Light",
@@ -176,7 +177,29 @@
     "connectionError": "Unable to connect to server. Please try again.",
     "help": "Need help?",
     "viewDocs": "View Documentation",
+    "requestApiKey": "Don't have an API key? Request one",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "Request an API Key",
+    "subtitle": "Enter your name and work email — we'll send a verification link to issue your key.",
+    "nameLabel": "Your name",
+    "namePlaceholder": "e.g. Budi Santoso",
+    "emailLabel": "Work email",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "Name and email are required",
+    "submit": "Send verification email",
+    "submitting": "Sending...",
+    "submittedTitle": "Check your email",
+    "submittedBody": "If {{email}} is eligible, a verification link is on its way. Click it to receive your API key.",
+    "backToLogin": "Back to login"
+  },
+  "verifyApiKey": {
+    "verifying": "Verifying your link...",
+    "successTitle": "Your API key is ready",
+    "successBody": "Copy it now — it will not be shown again.",
+    "errorTitle": "Verification failed",
+    "missingToken": "This link is missing its verification token."
   },
   "dashboard": {
     "title": "Dashboard",

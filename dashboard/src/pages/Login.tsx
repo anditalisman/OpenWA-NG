@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Eye, EyeOff, Languages } from 'lucide-react';
 import { CustomSelect } from '../components/CustomSelect';
 import { languageOptions, resolveSupportedLanguage, type SupportedLanguage } from '../i18n';
@@ -116,6 +117,10 @@ export function Login({ onLogin }: LoginProps) {
           >
             {t('login.viewDocs')}
           </a>
+        </p>
+
+        <p className="login-help">
+          <Link to="/request-api-key">{t('login.requestApiKey')}</Link>
         </p>
       </div>
     </div>

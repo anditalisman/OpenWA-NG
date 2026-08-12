@@ -124,6 +124,20 @@ export const BLANK_SHADOWED_ENV_KEYS: string[] = [
   'WWEBJS_WEB_VERSION',
   'WWEBJS_WEB_VERSION_REMOTE_PATH',
   'WWEBJS_AUTH_TIMEOUT_MS',
+  // Advertised base URL + self-service API key requests (opt-in, off unless explicitly enabled).
+  // Blank-forwarded like everything else here so an operator who sets nothing does not have an
+  // empty string shadow a value in .env / data/.env.generated.
+  'BASE_URL',
+  'DASHBOARD_URL',
+  'SELF_SERVICE_API_KEYS_ENABLED',
+  'SELF_SERVICE_ALLOWED_EMAIL_DOMAINS',
+  'SELF_SERVICE_TOKEN_TTL_MINUTES',
+  'SMTP_HOST',
+  'SMTP_PORT',
+  'SMTP_SECURE',
+  'SMTP_USER',
+  'SMTP_PASSWORD',
+  'SMTP_FROM',
 ];
 
 export function clearBlankEnv(env: NodeJS.ProcessEnv, keys: string[]): void {

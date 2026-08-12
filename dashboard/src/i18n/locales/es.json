@@ -42,7 +42,8 @@
     "unknownError": "Error desconocido",
     "showApiKey": "Mostrar clave API",
     "hideApiKey": "Ocultar clave API",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "copy": "Copiar"
   },
   "theme": {
     "light": "Claro",
@@ -176,7 +177,29 @@
     "connectionError": "No se puede conectar al servidor. Por favor, inténtalo de nuevo.",
     "help": "¿Necesitas ayuda?",
     "viewDocs": "Ver documentación",
+    "requestApiKey": "¿No tienes una clave de API? Solicítala",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "Solicitar una clave de API",
+    "subtitle": "Introduce tu nombre y tu correo laboral — te enviaremos un enlace de verificación para emitir tu clave.",
+    "nameLabel": "Tu nombre",
+    "namePlaceholder": "p. ej. Budi Santoso",
+    "emailLabel": "Correo laboral",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "fieldsRequired": "El nombre y el correo son obligatorios",
+    "submit": "Enviar correo de verificación",
+    "submitting": "Enviando...",
+    "submittedTitle": "Revisa tu correo",
+    "submittedBody": "Si {{email}} es elegible, un enlace de verificación está en camino. Haz clic en él para recibir tu clave de API.",
+    "backToLogin": "Volver al inicio de sesión"
+  },
+  "verifyApiKey": {
+    "verifying": "Verificando tu enlace...",
+    "successTitle": "Tu clave de API está lista",
+    "successBody": "Cópiala ahora — no se volverá a mostrar.",
+    "errorTitle": "Verificación fallida",
+    "missingToken": "A este enlace le falta el token de verificación."
   },
   "dashboard": {
     "title": "Panel",

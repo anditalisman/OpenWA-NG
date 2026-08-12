@@ -42,7 +42,8 @@
     "refresh": "רענון",
     "errorGeneric": "אירעה שגיאה",
     "unknownError": "שגיאה לא ידועה",
-    "retry": "נסה שוב"
+    "retry": "נסה שוב",
+    "copy": "העתק"
   },
   "theme": {
     "light": "בהיר",
@@ -183,7 +184,29 @@
     "connectionError": "לא ניתן להתחבר לשרת. יש לנסות שוב.",
     "help": "צריך עזרה?",
     "viewDocs": "לצפייה בתיעוד",
+    "requestApiKey": "אין לך מפתח API? בקש אחד",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "בקשת מפתח API",
+    "subtitle": "הזן את שמך ואת כתובת הדוא\"ל העסקית שלך — נשלח קישור אימות להנפקת המפתח שלך.",
+    "nameLabel": "השם שלך",
+    "namePlaceholder": "לדוגמה: Budi Santoso",
+    "emailLabel": "דוא\"ל עסקי",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "יש למלא שם וכתובת דוא\"ל",
+    "submit": "שלח דוא\"ל אימות",
+    "submitting": "שולח...",
+    "submittedTitle": "בדוק את הדוא\"ל שלך",
+    "submittedBody": "אם {{email}} כשיר, קישור אימות בדרך אליך. לחץ עליו כדי לקבל את מפתח ה-API שלך.",
+    "backToLogin": "חזרה להתחברות"
+  },
+  "verifyApiKey": {
+    "verifying": "מאמת את הקישור שלך...",
+    "successTitle": "מפתח ה-API שלך מוכן",
+    "successBody": "העתק אותו עכשיו — הוא לא יוצג שוב.",
+    "errorTitle": "האימות נכשל",
+    "missingToken": "לקישור זה חסר אסימון אימות."
   },
   "dashboard": {
     "title": "דאשבורד",

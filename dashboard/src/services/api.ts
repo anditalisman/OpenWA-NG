@@ -911,6 +911,23 @@ export const apiKeyApi = {
 };
 
 // =============================================================================
+// Self-service API key requests — fully unauthenticated (no X-API-Key exists yet)
+// =============================================================================
+
+export const selfServiceApi = {
+  request: (data: { name: string; email: string }) =>
+    request<{ submitted: boolean }>('/auth/api-keys/self-service/request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  verify: (token: string) =>
+    request<{ id: string; name: string; apiKey: string; role: string }>('/auth/api-keys/self-service/verify', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+};
+
+// =============================================================================
 // Audit/Logs API
 // =============================================================================
 
