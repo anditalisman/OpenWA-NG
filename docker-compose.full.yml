@@ -60,12 +60,13 @@ services:
     networks:
       - openwa-network
       - internal-docker
-    # Public DNS for resolving external hosts (WhatsApp servers, the wa-version registry, SMTP
-    # for self-service email, npm during build) — the host's default resolver isn't guaranteed
-    # reachable from inside the container network.
+    # 10.10.222.101 is PTAMGM's internal DNS server — needed to resolve internal
+    # *.ptamgirimenang.com / *.ptamgm.net hostnames (e.g. the Postgres host, SMTP relay).
+    # 8.8.8.8 is the fallback for external hosts (WhatsApp servers, the wa-version registry, npm
+    # during build) when the internal resolver doesn't have them.
     dns:
+      - 10.10.222.101
       - 8.8.8.8
-      - 8.8.4.4
     # Container hardening: Chromium runs with --no-sandbox, so the
     # container itself is the confinement boundary. cap_drop ALL + a minimal re-add
     # ONLY for the root entrypoint's chown + gosu privilege-drop; once gosu setuids to
@@ -105,6 +106,7 @@ services:
     environment:
       # Core
       - NODE_ENV=${NODE_ENV:-production}
+      - TZ=Asia/Makassar
       # Writable HOME on tmpfs so Chromium's HOME-relative writes don't hit the read_only rootfs
       - HOME=/tmp
       # Chromium resolves its home from the passwd entry (no /home/openwa), ignoring $HOME, so without
