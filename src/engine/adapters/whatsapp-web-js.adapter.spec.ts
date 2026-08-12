@@ -551,6 +551,58 @@ describe('WhatsAppWebJsAdapter readiness guard (#100)', () => {
   });
 });
 
+describe('WhatsAppWebJsAdapter.requestPairingCode readiness', () => {
+  /**
+   * A whatsapp-web.js Client as it exists between `new Client(...)` and the browser being up: the
+   * adapter has already stored it (`this.client = client` runs before `client.initialize()`), but
+   * `pupPage` is still null. Calling requestPairingCode on it reaches
+   * `exposeFunctionIfAbsent(this.pupPage, ...)` → `page.evaluate(...)` and throws — the fixture
+   * reproduces the library's own rejection rather than inventing one.
+   */
+  const clientBeforeItsPageExists = () => ({
+    pupPage: null,
+    requestPairingCode: jest.fn(() =>
+      Promise.reject(new TypeError("Cannot read properties of null (reading 'evaluate')")),
+    ),
+  });
+
+  const adapterWith = (status: EngineStatus, client: unknown): WhatsAppWebJsAdapter => {
+    const adapter = new WhatsAppWebJsAdapter({ sessionId: 's', sessionDataPath: './data/sessions', puppeteer: {} });
+    (adapter as unknown as { status: EngineStatus }).status = status;
+    (adapter as unknown as { client: unknown }).client = client;
+    return adapter;
+  };
+
+  it('rejects with EngineNotReadyError while the client exists but its page does not', async () => {
+    const client = clientBeforeItsPageExists();
+    const adapter = adapterWith(EngineStatus.INITIALIZING, client);
+
+    await expect(adapter.requestPairingCode('628123456789')).rejects.toBeInstanceOf(EngineNotReadyError);
+  });
+
+  it('does not reach into the library while the page is still absent', async () => {
+    const client = clientBeforeItsPageExists();
+    const adapter = adapterWith(EngineStatus.INITIALIZING, client);
+
+    await expect(adapter.requestPairingCode('628123456789')).rejects.toThrow();
+    expect(client.requestPairingCode).not.toHaveBeenCalled();
+  });
+
+  it('delegates to the client once the session is showing a QR', async () => {
+    const client = { pupPage: {}, requestPairingCode: jest.fn().mockResolvedValue('ABCD1234') };
+    const adapter = adapterWith(EngineStatus.QR_READY, client);
+
+    await expect(adapter.requestPairingCode('628123456789')).resolves.toBe('ABCD1234');
+    expect(client.requestPairingCode).toHaveBeenCalledWith('628123456789');
+  });
+
+  it('still rejects when there is no client at all', async () => {
+    const adapter = adapterWith(EngineStatus.DISCONNECTED, null);
+
+    await expect(adapter.requestPairingCode('628123456789')).rejects.toBeInstanceOf(EngineNotReadyError);
+  });
+});
+
 describe('WhatsAppWebJsAdapter.getChatHistory enrichment (parity with the live path)', () => {
   const readyAdapter = (client: unknown): WhatsAppWebJsAdapter => {
     const adapter = new WhatsAppWebJsAdapter({ sessionId: 's', sessionDataPath: './data/sessions', puppeteer: {} });
@@ -5913,13 +5965,24 @@ describe('WhatsAppWebJsAdapter honest outcomes (no phantom success)', () => {
       await expect(adapter.getProfilePicture('12345@c.us')).rejects.toBeInstanceOf(EngineTransportError);
     });
 
-    it('getProfilePicture still maps a genuine lookup failure to null (→ "no picture")', async () => {
-      // A wwebjs "this contact has no picture" rejects with a ServerError — it is NOT a transport
-      // signature. It must resolve to null so the API answers "no avatar" rather than a 503.
+    it('getProfilePicture maps undefined — the library\'s only "no picture" channel — to null', async () => {
+      // `Client.getProfilePicUrl` catches ServerStatusCodeError INSIDE the page and resolves
+      // `undefined` (Client.js:2163-2164), then ends `return profilePic ? profilePic.eurl :
+      // undefined`. So the no-picture verdict reaches us as a VALUE and never as a rejection.
+      const adapter = readyAdapter({ getProfilePicUrl: jest.fn().mockResolvedValue(undefined) });
+      await expect(adapter.getProfilePicture('12345@c.us')).resolves.toBeNull();
+    });
+
+    it('getProfilePicture answers 503 for a page-side exception, which is what the route documents', async () => {
+      // This case used to resolve null. The test that pinned it mocked a rejected ServerError —
+      // a shape the library cannot deliver, since the page swallows exactly that one into
+      // `undefined` above — so it pinned the opposite of the route's own 503 description:
+      // "Deliberately not reported as `url: null` — that is the same answer a contact with no
+      // picture gives, and a caller cannot tell them apart."
       const adapter = readyAdapter({
         getProfilePicUrl: jest.fn().mockRejectedValue(new Error("Server returned error: couldn't get profile picture")),
       });
-      await expect(adapter.getProfilePicture('12345@c.us')).resolves.toBeNull();
+      await expect(adapter.getProfilePicture('12345@c.us')).rejects.toBeInstanceOf(EngineTransportError);
     });
   });
 

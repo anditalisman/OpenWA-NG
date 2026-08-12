@@ -321,12 +321,12 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   private readonly logger = createLogger('WhatsAppWebJsAdapter');
   // Bound concurrent inbound media downloads: downloadMedia() materialises the full base64 blob, so an
   // unbounded burst could stack many multi-MB allocations.
-  private readonly inboundLimiter = new ConcurrencyLimiter(
-    inboundMediaConcurrency(),
-    // Queue cap == active slots: beyond (active + queued) concurrent media messages, reject instead of
-    // parking, so a burst can't grow heap without bound (each parked closure holds the message).
-    inboundMediaConcurrency(),
-  );
+  // The queue is UNBOUNDED. A cap equal to the active slots made admission a constant
+  // (active + queued) whatever the batch size, so a burst lost the media of everything past the
+  // eighth — the same defect repaired on the Baileys side. Parking costs one held Message per
+  // waiting download, and only the download runs inside the limiter: each message awaits its own
+  // capInboundMediaFor, so a parked one delays itself and a text message never enters the gate.
+  private readonly inboundLimiter = new ConcurrencyLimiter(inboundMediaConcurrency());
 
   private readonly host: WwebjsEngineHost;
   private readonly groups: WwebjsGroups;
@@ -391,17 +391,32 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         () => undefined,
       );
     });
-    // The slot-holder runs in the background. It only rejects when the limiter's waiter queue is
-    // saturated (queue full) — in which case the download task never ran and boundedReady would hang.
-    // Resolve null so the caller unblocks and emits the message without media, matching the
-    // timeout/byte-cap no-media path. Never let it surface as an unhandled rejection either.
-    void slotHeld.catch(() => {
-      this.logger.warn('Inbound media limiter saturated; emitting message without media', {
+    // Defensive only, and deliberately kept. `run()` rejects on a full queue (gone — the queue is
+    // unbounded) or on close(), which nothing calls on this limiter; the task itself swallows both
+    // download outcomes. So nothing is expected here — but an unhandled rejection from a
+    // fire-and-forget promise is not an acceptable way to find that out.
+    void slotHeld.catch((error: unknown) => {
+      this.logger.warn('Inbound media slot holder rejected unexpectedly; emitting message without media', {
         msgId: msg.id._serialized,
+        error: String(error),
       });
       resolveBounded(null);
     });
-    const media = await boundedReady;
+    // The caller's wait spans the QUEUE as well as the download, and BOTH are unbounded: the queue by
+    // design now, and the wait for a slot because a slot is held until its download really settles —
+    // which a hung page never does. The inner race only starts once this message is admitted, so it
+    // cannot cover the waiting. Without a bound here, a burst behind stuck slots parks forever and
+    // those messages are never emitted AT ALL — strictly worse than the media loss this change set
+    // out to fix. The old queue cap provided that degradation by rejecting; this restores it without
+    // shedding at a fixed batch size.
+    const media = await withInboundDownloadTimeout(boundedReady, inboundMediaTimeoutMs(), () =>
+      this.logger.warn(
+        'Inbound media did not arrive within MEDIA_DOWNLOAD_TIMEOUT_MS; emitting message without media',
+        {
+          msgId: msg.id._serialized,
+        },
+      ),
+    );
     if (!media) {
       return declaredOnlyMedia(msg);
     }
@@ -1740,12 +1755,19 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
 
   /**
    * Request an 8-char pairing code so the user can link via "Link with phone number" instead of
-   * scanning the QR. Must be called after the engine has started (the client is initialized and
-   * waiting to link); whatsapp-web.js throws if called before it is ready or after authentication.
+   * scanning the QR.
+   *
+   * Gated on QR_READY, not on the client merely existing. `this.client` is assigned before
+   * `client.initialize()` (see runInitAttempt), so for the whole Chromium launch — seconds on a
+   * modest host — a client is present while its `pupPage` is still null, and whatsapp-web.js's
+   * requestPairingCode reaches `exposeFunctionIfAbsent(this.pupPage, …)` and throws a raw TypeError
+   * that surfaces as a 500. QR_READY is the precise window this can work in anyway: the library
+   * emits 'qr' only once the Store is injected and the in-page socket reports UNPAIRED, which are
+   * the same preconditions the pairing flow needs.
    */
   async requestPairingCode(phoneNumber: string): Promise<string> {
-    if (!this.client) {
-      throw new EngineNotReadyError();
+    if (!this.client || this.status !== EngineStatus.QR_READY) {
+      throw new EngineNotReadyError('Session is not waiting to be linked. Start it and wait for the QR stage.');
     }
     return this.client.requestPairingCode(phoneNumber);
   }
