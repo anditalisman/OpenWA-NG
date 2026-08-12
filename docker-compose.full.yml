@@ -60,6 +60,12 @@ services:
     networks:
       - openwa-network
       - internal-docker
+    # Public DNS for resolving external hosts (WhatsApp servers, the wa-version registry, SMTP
+    # for self-service email, npm during build) — the host's default resolver isn't guaranteed
+    # reachable from inside the container network.
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     # Container hardening: Chromium runs with --no-sandbox, so the
     # container itself is the confinement boundary. cap_drop ALL + a minimal re-add
     # ONLY for the root entrypoint's chown + gosu privilege-drop; once gosu setuids to
