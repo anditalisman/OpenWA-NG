@@ -188,10 +188,13 @@ services:
   # separate dashboard container. Put your own TLS reverse proxy in front if needed.
 
   # ===== Redis (dipakai: rate-limit, cache, WebSocket fan-out) =====
+  # Core service (no `profiles:` gate) — Dokploy's redeploy button runs a plain
+  # `docker compose up -d` with no way to pass `--profile redis`, so a profile-gated
+  # service here would never actually get created through the normal deploy flow.
+  # PAMGM always wants Redis on, so it belongs in the default service set.
   redis:
     image: redis:7-alpine
     container_name: openwa-redis
-    profiles: ['redis', 'full']
     restart: unless-stopped
     networks:
       - openwa-network
