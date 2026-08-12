@@ -419,12 +419,26 @@ volumes:
     driver: local
 
 networks:
+  # Explicit subnets (not left to Docker's auto-allocated default address pools): on a shared host
+  # running many other compose projects, those pools (172.16.0.0/12 as /16 blocks, 192.168.0.0/16 as
+  # /20 blocks) run out — "all predefined address pools have been fully subnetted" — and every new
+  # `docker compose up` fails at network creation regardless of what this project asks for. Picking a
+  # subnet outside both ranges sidesteps that entirely. Same subnets as docker-compose.yml (the two
+  # are alternatives, never run together) — re-verify they're unused via `docker network inspect`
+  # before reusing this file on a different host.
+  #
   # Application network — datastores and openwa-api. Keep the name `openwa-network`:
   # docker.service.ts attaches orchestrated containers to it by literal name.
   openwa-network:
     name: openwa-network
+    ipam:
+      config:
+        - subnet: 10.30.30.0/24
   # Isolated network for the Docker socket proxy. `internal: true` means no external
   # connectivity; only openwa-api joins it, so nothing else can reach docker-proxy:2375.
   internal-docker:
     name: openwa-internal-docker
     internal: true
+    ipam:
+      config:
+        - subnet: 10.30.31.0/24
