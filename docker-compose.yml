@@ -7,7 +7,7 @@
 # database/storage bawaan yang bentrok dengan server existing.
 #
 # Redis TETAP ada (dipakai untuk rate-limit lintas-proses, cache, dan WebSocket fan-out) —
-# jalankan dengan: docker compose -f docker-compose.pamgm.yml --profile redis up -d --build
+# jalankan dengan: docker compose --profile redis up -d --build
 
 services:
   # ===== CORE: Docker Socket Proxy (sole container with /var/run/docker.sock access) =====
@@ -160,7 +160,7 @@ services:
       - DOCKER_HOST=tcp://docker-proxy:2375
     volumes:
       - openwa-data:/app/data
-      - ./docker-compose.pamgm.yml:/app/docker-compose.yml:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
     depends_on:
       docker-proxy:
         condition: service_started
@@ -218,8 +218,21 @@ volumes:
     driver: local
 
 networks:
+  # Explicit subnets (not left to Docker's auto-allocated default address pools): on a shared host
+  # running many other compose projects, those pools (172.16.0.0/12 as /16 blocks, 192.168.0.0/16 as
+  # /20 blocks) run out — "all predefined address pools have been fully subnetted" — and every new
+  # `docker compose up` fails at network creation regardless of what this project asks for. Picking a
+  # subnet outside both ranges sidesteps that entirely. 10.30.30.0/24 and 10.30.31.0/24 are unused on
+  # the PAMGM Dokploy host as of 2026-08-12 (checked via `docker network inspect` across all networks);
+  # re-verify with the same command before reusing this file on a different host.
   openwa-network:
     name: openwa-network
+    ipam:
+      config:
+        - subnet: 10.30.30.0/24
   internal-docker:
     name: openwa-internal-docker
     internal: true
+    ipam:
+      config:
+        - subnet: 10.30.31.0/24
