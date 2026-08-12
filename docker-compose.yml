@@ -41,6 +41,13 @@ services:
     networks:
       - openwa-network
       - internal-docker
+    # 10.10.222.101 is PTAMGM's internal DNS server — needed to resolve internal
+    # *.ptamgirimenang.com / *.ptamgm.net hostnames (e.g. the Postgres host, SMTP relay).
+    # 8.8.8.8 is the fallback for external hosts (WhatsApp servers, the wa-version registry, npm
+    # during build) when the internal resolver doesn't have them.
+    dns:
+      - 10.10.222.101
+      - 8.8.8.8
     security_opt:
       - 'no-new-privileges:true'
     cap_drop:
@@ -62,6 +69,7 @@ services:
       - '2785'
     environment:
       - NODE_ENV=${NODE_ENV:-production}
+      - TZ=Asia/Makassar
       - HOME=/tmp
       - XDG_CONFIG_HOME=/tmp/.config
       - XDG_CACHE_HOME=/tmp/.cache
