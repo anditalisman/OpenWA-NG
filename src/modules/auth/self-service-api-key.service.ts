@@ -80,21 +80,33 @@ export class SelfServiceApiKeyService {
     const verifyUrl = `${dashboardUrl}/verify-api-key?token=${token}`;
     const ttl = this.tokenTtlMinutes();
 
-    await this.mailService.send({
-      to: email,
-      subject: 'Verifikasi permintaan API key OpenWA PAMGM',
-      text:
-        `Halo ${dto.name},\n\n` +
-        `Klik link berikut untuk memverifikasi email Anda dan menerima API key ` +
-        `(berlaku ${ttl} menit, hanya bisa dipakai sekali):\n\n${verifyUrl}\n\n` +
-        `Kalau Anda tidak meminta ini, abaikan email ini.`,
-      html:
-        `<p>Halo ${dto.name},</p>` +
-        `<p>Klik link berikut untuk memverifikasi email Anda dan menerima API key ` +
-        `(berlaku ${ttl} menit, hanya bisa dipakai sekali):</p>` +
-        `<p><a href="${verifyUrl}">${verifyUrl}</a></p>` +
-        `<p>Kalau Anda tidak meminta ini, abaikan email ini.</p>`,
-    });
+    try {
+      await this.mailService.send({
+        to: email,
+        subject: 'Verifikasi permintaan API key OpenWA PAMGM',
+        text:
+          `Halo ${dto.name},\n\n` +
+          `Klik link berikut untuk memverifikasi email Anda dan menerima API key ` +
+          `(berlaku ${ttl} menit, hanya bisa dipakai sekali):\n\n${verifyUrl}\n\n` +
+          `Kalau Anda tidak meminta ini, abaikan email ini.`,
+        html:
+          `<p>Halo ${dto.name},</p>` +
+          `<p>Klik link berikut untuk memverifikasi email Anda dan menerima API key ` +
+          `(berlaku ${ttl} menit, hanya bisa dipakai sekali):</p>` +
+          `<p><a href="${verifyUrl}">${verifyUrl}</a></p>` +
+          `<p>Kalau Anda tidak meminta ini, abaikan email ini.</p>`,
+      });
+    } catch (error) {
+      // The token is only useful once it's delivered — drop the request rather than leave an
+      // orphaned row the caller has no way to redeem, and let them retry cleanly.
+      await this.requestRepository.delete(request.id);
+      this.logger.error(
+        'Failed to send self-service verification email',
+        error instanceof Error ? error.stack : String(error),
+        { requestId: request.id, email },
+      );
+      throw new ServiceUnavailableException('Could not send the verification email right now — please try again later');
+    }
 
     this.logger.log('Self-service verification email sent', { requestId: request.id, email });
   }

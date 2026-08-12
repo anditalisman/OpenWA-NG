@@ -39,7 +39,11 @@ export class SelfServiceApiKeyController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a self-service API key (sends a verification email)' })
   @ApiResponse({ status: 200, description: 'Accepted for processing', type: RequestSelfServiceApiKeyResponseDto })
-  @ApiResponse({ status: 503, description: 'Self-service API key requests are disabled on this instance' })
+  @ApiResponse({
+    status: 503,
+    description:
+      'Self-service API key requests are disabled on this instance, or the verification email could not be sent',
+  })
   async request(
     @Body() dto: RequestSelfServiceApiKeyDto,
     @Req() req: Request,
