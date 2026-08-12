@@ -28,6 +28,7 @@ import { CallModule } from './modules/call/call.module';
 import { LabelModule } from './modules/label/label.module';
 import { ChannelModule } from './modules/channel/channel.module';
 import { CacheModule } from './common/cache';
+import { MailModule } from './common/mail';
 import { StorageModule } from './common/storage/storage.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
@@ -275,6 +276,7 @@ if (dashboardServingEnabled && dashboardBuildPresent) {
     PluginsModule, // Global plugin system
     LoggerModule,
     CacheModule,
+    MailModule,
     StorageModule,
     AuditModule,
     EventsModule, // WebSocket real-time events

@@ -42,7 +42,8 @@
     "refresh": "Aggiorna",
     "errorGeneric": "Si è verificato un errore",
     "unknownError": "Errore sconosciuto",
-    "retry": "Riprova"
+    "retry": "Riprova",
+    "copy": "Copia"
   },
   "theme": {
     "light": "Chiaro",
@@ -176,7 +177,29 @@
     "connectionError": "Impossibile connettersi al server. Riprova.",
     "help": "Serve aiuto?",
     "viewDocs": "Visualizza la documentazione",
+    "requestApiKey": "Non hai una chiave API? Richiedine una",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "Richiedi una chiave API",
+    "subtitle": "Inserisci il tuo nome e la tua email di lavoro — ti invieremo un link di verifica per emettere la tua chiave.",
+    "nameLabel": "Il tuo nome",
+    "namePlaceholder": "es. Budi Santoso",
+    "emailLabel": "Email di lavoro",
+    "emailPlaceholder": "tu@esempio.com",
+    "fieldsRequired": "Nome ed email sono obbligatori",
+    "submit": "Invia email di verifica",
+    "submitting": "Invio in corso...",
+    "submittedTitle": "Controlla la tua email",
+    "submittedBody": "Se {{email}} è idoneo, un link di verifica è in arrivo. Cliccalo per ricevere la tua chiave API.",
+    "backToLogin": "Torna al login"
+  },
+  "verifyApiKey": {
+    "verifying": "Verifica del link in corso...",
+    "successTitle": "La tua chiave API è pronta",
+    "successBody": "Copiala ora — non verrà mostrata di nuovo.",
+    "errorTitle": "Verifica non riuscita",
+    "missingToken": "A questo link manca il token di verifica."
   },
   "dashboard": {
     "title": "Dashboard",

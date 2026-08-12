@@ -42,7 +42,8 @@
     "refresh": "刷新",
     "errorGeneric": "发生错误",
     "unknownError": "未知错误",
-    "retry": "重试"
+    "retry": "重试",
+    "copy": "复制"
   },
   "theme": {
     "light": "浅色",
@@ -176,7 +177,29 @@
     "connectionError": "无法连接到服务器。请重试。",
     "help": "需要帮助？",
     "viewDocs": "查看文档",
+    "requestApiKey": "没有 API 密钥？申请一个",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "申请 API 密钥",
+    "subtitle": "输入您的姓名和工作邮箱 — 我们会发送验证链接以签发密钥。",
+    "nameLabel": "姓名",
+    "namePlaceholder": "例如：Budi Santoso",
+    "emailLabel": "工作邮箱",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "姓名和邮箱为必填项",
+    "submit": "发送验证邮件",
+    "submitting": "发送中...",
+    "submittedTitle": "请查收邮件",
+    "submittedBody": "如果 {{email}} 符合条件，验证链接即将发送。点击链接即可获取您的 API 密钥。",
+    "backToLogin": "返回登录"
+  },
+  "verifyApiKey": {
+    "verifying": "正在验证链接...",
+    "successTitle": "您的 API 密钥已就绪",
+    "successBody": "请立即复制 — 之后将不再显示。",
+    "errorTitle": "验证失败",
+    "missingToken": "此链接缺少验证令牌。"
   },
   "dashboard": {
     "title": "仪表盘",

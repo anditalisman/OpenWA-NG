@@ -42,7 +42,8 @@
     "refresh": "Aktualisieren",
     "errorGeneric": "Ein Fehler ist aufgetreten",
     "unknownError": "Unbekannter Fehler",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "copy": "Kopieren"
   },
   "theme": {
     "light": "Hell",
@@ -176,7 +177,29 @@
     "connectionError": "Verbindung zum Server nicht möglich. Bitte versuche es erneut.",
     "help": "Brauchst du Hilfe?",
     "viewDocs": "Dokumentation ansehen",
+    "requestApiKey": "Kein API-Schlüssel? Jetzt anfordern",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "API-Schlüssel anfordern",
+    "subtitle": "Geben Sie Ihren Namen und Ihre dienstliche E-Mail-Adresse ein — wir senden Ihnen einen Bestätigungslink zur Ausstellung Ihres Schlüssels.",
+    "nameLabel": "Ihr Name",
+    "namePlaceholder": "z. B. Budi Santoso",
+    "emailLabel": "Dienstliche E-Mail",
+    "emailPlaceholder": "sie@beispiel.com",
+    "fieldsRequired": "Name und E-Mail sind erforderlich",
+    "submit": "Bestätigungs-E-Mail senden",
+    "submitting": "Wird gesendet...",
+    "submittedTitle": "Prüfen Sie Ihre E-Mails",
+    "submittedBody": "Wenn {{email}} berechtigt ist, ist ein Bestätigungslink unterwegs. Klicken Sie darauf, um Ihren API-Schlüssel zu erhalten.",
+    "backToLogin": "Zurück zur Anmeldung"
+  },
+  "verifyApiKey": {
+    "verifying": "Ihr Link wird überprüft...",
+    "successTitle": "Ihr API-Schlüssel ist bereit",
+    "successBody": "Kopieren Sie ihn jetzt — er wird nicht erneut angezeigt.",
+    "errorTitle": "Verifizierung fehlgeschlagen",
+    "missingToken": "Diesem Link fehlt das Bestätigungstoken."
   },
   "dashboard": {
     "title": "Dashboard",

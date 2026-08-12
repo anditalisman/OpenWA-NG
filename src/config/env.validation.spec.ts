@@ -391,4 +391,42 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ MEDIA_CONVERSION_TIMEOUT_MS: 'abc' })).toThrow(/positive integer/);
     expect(() => validateEnv({ MEDIA_CONVERSION_MAX_OUTPUT_BYTES: '52428800' })).not.toThrow();
   });
+
+  it('requires SMTP + an email allow-list + a base URL when SELF_SERVICE_API_KEYS_ENABLED=true', () => {
+    expect(() => validateEnv({ SELF_SERVICE_API_KEYS_ENABLED: 'true' })).toThrow(/SMTP_HOST/);
+    expect(() => validateEnv({ SELF_SERVICE_API_KEYS_ENABLED: 'true', SMTP_HOST: 'smtp.example.com' })).toThrow(
+      /SMTP_FROM/,
+    );
+    expect(() =>
+      validateEnv({
+        SELF_SERVICE_API_KEYS_ENABLED: 'true',
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_FROM: 'no-reply@example.com',
+      }),
+    ).toThrow(/SELF_SERVICE_ALLOWED_EMAIL_DOMAINS/);
+    expect(() =>
+      validateEnv({
+        SELF_SERVICE_API_KEYS_ENABLED: 'true',
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_FROM: 'no-reply@example.com',
+        SELF_SERVICE_ALLOWED_EMAIL_DOMAINS: 'example.com',
+      }),
+    ).toThrow(/DASHBOARD_URL/);
+    expect(() =>
+      validateEnv({
+        SELF_SERVICE_API_KEYS_ENABLED: 'true',
+        SMTP_HOST: 'smtp.example.com',
+        SMTP_FROM: 'no-reply@example.com',
+        SELF_SERVICE_ALLOWED_EMAIL_DOMAINS: 'example.com',
+        DASHBOARD_URL: 'https://dashboard.example.com',
+      }),
+    ).not.toThrow();
+    // Disabled (the default): none of the above is required.
+    expect(() => validateEnv({})).not.toThrow();
+  });
+
+  it('rejects an out-of-range SMTP_PORT and a non-positive SELF_SERVICE_TOKEN_TTL_MINUTES', () => {
+    expect(() => validateEnv({ SMTP_PORT: '99999' })).toThrow(/SMTP_PORT/);
+    expect(() => validateEnv({ SELF_SERVICE_TOKEN_TTL_MINUTES: '0' })).toThrow(/positive integer/);
+  });
 });

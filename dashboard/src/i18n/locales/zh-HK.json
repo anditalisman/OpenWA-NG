@@ -42,7 +42,8 @@
     "refresh": "重新整理",
     "errorGeneric": "發生錯誤",
     "unknownError": "未知錯誤",
-    "retry": "重試"
+    "retry": "重試",
+    "copy": "複製"
   },
   "theme": {
     "light": "淺色",
@@ -176,7 +177,29 @@
     "connectionError": "無法連線到伺服器。請再試一次。",
     "help": "需要協助？",
     "viewDocs": "查看文件",
+    "requestApiKey": "沒有 API 金鑰？申請一個",
     "version": "v{{version}} · {{date}}"
+  },
+  "requestApiKey": {
+    "title": "申請 API 金鑰",
+    "subtitle": "輸入您的姓名和工作電郵 — 我們會發送驗證連結以簽發金鑰。",
+    "nameLabel": "姓名",
+    "namePlaceholder": "例如：Budi Santoso",
+    "emailLabel": "工作電郵",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "姓名和電郵為必填項",
+    "submit": "發送驗證電郵",
+    "submitting": "發送中...",
+    "submittedTitle": "請查收電郵",
+    "submittedBody": "如果 {{email}} 符合資格，驗證連結即將發送。點擊連結即可獲取您的 API 金鑰。",
+    "backToLogin": "返回登入"
+  },
+  "verifyApiKey": {
+    "verifying": "正在驗證連結...",
+    "successTitle": "您的 API 金鑰已就緒",
+    "successBody": "請立即複製 — 之後將不再顯示。",
+    "errorTitle": "驗證失敗",
+    "missingToken": "此連結缺少驗證權杖。"
   },
   "dashboard": {
     "title": "控制面板",
