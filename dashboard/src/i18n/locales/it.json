@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "Richiedi una chiave API",
     "subtitle": "Inserisci il tuo nome e la tua email di lavoro — ti invieremo un link di verifica per emettere la tua chiave.",
+    "corporateEmailHint": "Utilizza il tuo indirizzo e-mail aziendale/di lavoro. Le richieste da domini personali o non riconosciuti non riceveranno una chiave.",
     "nameLabel": "Il tuo nome",
     "namePlaceholder": "es. Budi Santoso",
     "emailLabel": "Email di lavoro",

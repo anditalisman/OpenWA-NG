@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "API-Schlüssel anfordern",
     "subtitle": "Geben Sie Ihren Namen und Ihre dienstliche E-Mail-Adresse ein — wir senden Ihnen einen Bestätigungslink zur Ausstellung Ihres Schlüssels.",
+    "corporateEmailHint": "Verwenden Sie Ihre geschäftliche E-Mail-Adresse. Anfragen von privaten oder unbekannten Domains erhalten keinen Schlüssel.",
     "nameLabel": "Ihr Name",
     "namePlaceholder": "z. B. Budi Santoso",
     "emailLabel": "Dienstliche E-Mail",

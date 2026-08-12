@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "申请 API 密钥",
     "subtitle": "输入您的姓名和工作邮箱 — 我们会发送验证链接以签发密钥。",
+    "corporateEmailHint": "请使用您的公司/企业邮箱地址。来自个人或未识别域名的申请将不会收到密钥。",
     "nameLabel": "姓名",
     "namePlaceholder": "例如：Budi Santoso",
     "emailLabel": "工作邮箱",

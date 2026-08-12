@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "Solicitar una clave de API",
     "subtitle": "Introduce tu nombre y tu correo laboral — te enviaremos un enlace de verificación para emitir tu clave.",
+    "corporateEmailHint": "Utiliza tu correo electrónico corporativo/de la empresa. Las solicitudes de dominios personales o no reconocidos no recibirán una clave.",
     "nameLabel": "Tu nombre",
     "namePlaceholder": "p. ej. Budi Santoso",
     "emailLabel": "Correo laboral",

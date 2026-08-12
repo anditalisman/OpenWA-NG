@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "Request an API Key",
     "subtitle": "Enter your name and work email — we'll send a verification link to issue your key.",
+    "corporateEmailHint": "Use your corporate/company email address. Requests from personal or unrecognized domains will not receive a key.",
     "nameLabel": "Your name",
     "namePlaceholder": "e.g. Budi Santoso",
     "emailLabel": "Work email",

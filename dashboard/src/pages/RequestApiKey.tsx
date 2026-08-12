@@ -49,7 +49,10 @@ export function RequestApiKey() {
         ) : (
           <>
             <h2 style={{ marginBottom: '0.5rem' }}>{t('requestApiKey.title')}</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>{t('requestApiKey.subtitle')}</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>{t('requestApiKey.subtitle')}</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+              {t('requestApiKey.corporateEmailHint')}
+            </p>
 
             <form onSubmit={e => void handleSubmit(e)} className="login-form">
               <div className="input-group">

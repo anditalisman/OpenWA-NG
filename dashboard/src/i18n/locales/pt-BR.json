@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "Solicitar uma chave de API",
     "subtitle": "Informe seu nome e e-mail corporativo — enviaremos um link de verificação para emitir sua chave.",
+    "corporateEmailHint": "Use seu endereço de e-mail corporativo/da empresa. Solicitações de domínios pessoais ou não reconhecidos não receberão uma chave.",
     "nameLabel": "Seu nome",
     "namePlaceholder": "ex: Budi Santoso",
     "emailLabel": "E-mail corporativo",

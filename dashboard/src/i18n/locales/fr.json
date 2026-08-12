@@ -183,6 +183,7 @@
   "requestApiKey": {
     "title": "Demander une clé API",
     "subtitle": "Indiquez votre nom et votre e-mail professionnel — nous vous enverrons un lien de vérification pour émettre votre clé.",
+    "corporateEmailHint": "Utilisez votre adresse e-mail professionnelle/de l'entreprise. Les demandes provenant de domaines personnels ou non reconnus ne recevront pas de clé.",
     "nameLabel": "Votre nom",
     "namePlaceholder": "ex. Budi Santoso",
     "emailLabel": "E-mail professionnel",
