@@ -15,6 +15,8 @@ import './App.css';
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
 const RequestApiKey = lazy(() => import('./pages/RequestApiKey').then(m => ({ default: m.RequestApiKey })));
 const VerifyApiKey = lazy(() => import('./pages/VerifyApiKey').then(m => ({ default: m.VerifyApiKey })));
+const ForgotApiKey = lazy(() => import('./pages/ForgotApiKey').then(m => ({ default: m.ForgotApiKey })));
+const RecoverApiKey = lazy(() => import('./pages/RecoverApiKey').then(m => ({ default: m.RecoverApiKey })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Sessions = lazy(() => import('./pages/Sessions').then(m => ({ default: m.Sessions })));
 const Chats = lazy(() => import('./pages/Chats').then(m => ({ default: m.Chats })));
@@ -113,6 +115,8 @@ function AppContent() {
                 none yet, and the emailed verify link must work in a fresh/incognito tab. */}
             <Route path="/request-api-key" element={<RequestApiKey />} />
             <Route path="/verify-api-key" element={<VerifyApiKey />} />
+            <Route path="/forgot-api-key" element={<ForgotApiKey />} />
+            <Route path="/recover-api-key" element={<RecoverApiKey />} />
             {isAuthenticated ? (
               <Route path="/" element={<Layout onLogout={handleLogout} userRole={role} />}>
                 <Route index element={<Dashboard />} />

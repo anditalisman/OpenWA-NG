@@ -122,6 +122,9 @@ export function Login({ onLogin }: LoginProps) {
         <p className="login-help">
           <Link to="/request-api-key">{t('login.requestApiKey')}</Link>
         </p>
+        <p className="login-help">
+          <Link to="/forgot-api-key">{t('login.forgotApiKey')}</Link>
+        </p>
       </div>
     </div>
   );

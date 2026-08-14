@@ -178,6 +178,7 @@
     "help": "¿Necesitas ayuda?",
     "viewDocs": "Ver documentación",
     "requestApiKey": "¿No tienes una clave de API? Solicítala",
+    "forgotApiKey": "¿Perdiste tu clave de API? Recupérala",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "Enviando...",
     "submittedTitle": "Revisa tu correo",
     "submittedBody": "Si {{email}} es elegible, un enlace de verificación está en camino. Haz clic en él para recibir tu clave de API.",
+    "lostKeyInstead": "¿Ya tienes una clave pero la perdiste? Recupérala en su lugar",
     "backToLogin": "Volver al inicio de sesión"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "Cópiala ahora — no se volverá a mostrar.",
     "errorTitle": "Verificación fallida",
     "missingToken": "A este enlace le falta el token de verificación."
+  },
+  "forgotApiKey": {
+    "title": "Recuperar tu clave de API",
+    "subtitle": "Introduce tu nombre y el correo laboral al que está registrada tu clave — te enviaremos un enlace de verificación para emitir una clave de reemplazo.",
+    "corporateEmailHint": "Utiliza tu correo electrónico corporativo/de la empresa. Las solicitudes de dominios personales o no reconocidos no recibirán una clave.",
+    "nameLabel": "Tu nombre",
+    "namePlaceholder": "p. ej. Budi Santoso",
+    "emailLabel": "Correo laboral",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "fieldsRequired": "El nombre y el correo son obligatorios",
+    "submit": "Enviar correo de recuperación",
+    "submitting": "Enviando...",
+    "submittedTitle": "Revisa tu correo",
+    "submittedBody": "Si {{email}} tiene una clave registrada, un enlace de recuperación está en camino. Al hacer clic en él se desactivará la clave anterior y se emitirá una nueva.",
+    "requestNewInstead": "¿Nunca has solicitado una clave? Solicita una en su lugar"
+  },
+  "recoverApiKey": {
+    "successTitle": "Tu clave de API ha sido recuperada",
+    "successBodyRevoked_one": "Tu clave anterior ha sido desactivada. Copia la nueva ahora — no se volverá a mostrar.",
+    "successBodyRevoked_other": "Tus {{count}} claves anteriores han sido desactivadas. Copia la nueva ahora — no se volverá a mostrar.",
+    "successBodyNoneRevoked": "Cópiala ahora — no se volverá a mostrar."
   },
   "dashboard": {
     "title": "Panel",

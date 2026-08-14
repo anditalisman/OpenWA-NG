@@ -178,6 +178,7 @@
     "help": "Besoin d'aide ?",
     "viewDocs": "Voir la documentation",
     "requestApiKey": "Pas de clé API ? Demandez-en une",
+    "forgotApiKey": "Clé API perdue ? Récupérez-la",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "Envoi en cours...",
     "submittedTitle": "Consultez vos e-mails",
     "submittedBody": "Si {{email}} est éligible, un lien de vérification est en route. Cliquez dessus pour recevoir votre clé API.",
+    "lostKeyInstead": "Vous avez déjà une clé mais l'avez perdue ? Récupérez-la à la place",
     "backToLogin": "Retour à la connexion"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "Copiez-la maintenant — elle ne sera plus affichée.",
     "errorTitle": "Échec de la vérification",
     "missingToken": "Ce lien n'a pas de jeton de vérification."
+  },
+  "forgotApiKey": {
+    "title": "Récupérer votre clé API",
+    "subtitle": "Indiquez votre nom et l'e-mail professionnel auquel votre clé est associée — nous vous enverrons un lien de vérification pour émettre une clé de remplacement.",
+    "corporateEmailHint": "Utilisez votre adresse e-mail professionnelle/de l'entreprise. Les demandes provenant de domaines personnels ou non reconnus ne recevront pas de clé.",
+    "nameLabel": "Votre nom",
+    "namePlaceholder": "ex. Budi Santoso",
+    "emailLabel": "E-mail professionnel",
+    "emailPlaceholder": "vous@exemple.com",
+    "fieldsRequired": "Le nom et l'e-mail sont requis",
+    "submit": "Envoyer l'e-mail de récupération",
+    "submitting": "Envoi en cours...",
+    "submittedTitle": "Consultez vos e-mails",
+    "submittedBody": "Si {{email}} possède une clé enregistrée, un lien de récupération est en route. En cliquant dessus, l'ancienne clé sera désactivée et une nouvelle sera émise.",
+    "requestNewInstead": "Vous n'avez jamais demandé de clé ? Demandez-en une à la place"
+  },
+  "recoverApiKey": {
+    "successTitle": "Votre clé API a été récupérée",
+    "successBodyRevoked_one": "Votre clé précédente a été désactivée. Copiez la nouvelle maintenant — elle ne sera plus affichée.",
+    "successBodyRevoked_other": "Vos {{count}} clés précédentes ont été désactivées. Copiez la nouvelle maintenant — elle ne sera plus affichée.",
+    "successBodyNoneRevoked": "Copiez-la maintenant — elle ne sera plus affichée."
   },
   "dashboard": {
     "title": "Tableau de bord",

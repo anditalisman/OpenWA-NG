@@ -925,6 +925,21 @@ export const selfServiceApi = {
       method: 'POST',
       body: JSON.stringify({ token }),
     }),
+  // "Forgot key": on verification every active self-service key already linked to the email is
+  // revoked and replaced — revokedCount tells the UI whether that actually happened.
+  requestRecovery: (data: { name: string; email: string }) =>
+    request<{ submitted: boolean }>('/auth/api-keys/self-service/forgot', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  verifyRecovery: (token: string) =>
+    request<{ id: string; name: string; apiKey: string; role: string; revokedCount: number }>(
+      '/auth/api-keys/self-service/forgot/verify',
+      {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      },
+    ),
 };
 
 // =============================================================================

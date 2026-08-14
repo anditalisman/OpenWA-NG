@@ -178,6 +178,7 @@
     "help": "需要帮助？",
     "viewDocs": "查看文档",
     "requestApiKey": "没有 API 密钥？申请一个",
+    "forgotApiKey": "忘记了 API 密钥？找回它",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "发送中...",
     "submittedTitle": "请查收邮件",
     "submittedBody": "如果 {{email}} 符合条件，验证链接即将发送。点击链接即可获取您的 API 密钥。",
+    "lostKeyInstead": "已经有密钥但忘记了？改为找回密钥",
     "backToLogin": "返回登录"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "请立即复制 — 之后将不再显示。",
     "errorTitle": "验证失败",
     "missingToken": "此链接缺少验证令牌。"
+  },
+  "forgotApiKey": {
+    "title": "找回您的 API 密钥",
+    "subtitle": "输入您的姓名和密钥注册所用的工作邮箱 — 我们会发送验证链接以签发替换密钥。",
+    "corporateEmailHint": "请使用您的公司/企业邮箱地址。来自个人或未识别域名的申请将不会收到密钥。",
+    "nameLabel": "姓名",
+    "namePlaceholder": "例如：Budi Santoso",
+    "emailLabel": "工作邮箱",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "姓名和邮箱为必填项",
+    "submit": "发送找回邮件",
+    "submitting": "发送中...",
+    "submittedTitle": "请查收邮件",
+    "submittedBody": "如果 {{email}} 已注册密钥，找回链接即将发送。点击链接后，旧密钥会立即停用并签发新密钥。",
+    "requestNewInstead": "从未申请过密钥？改为申请新密钥"
+  },
+  "recoverApiKey": {
+    "successTitle": "您的 API 密钥已找回",
+    "successBodyRevoked_one": "您之前的密钥已停用。请立即复制新密钥 — 之后将不再显示。",
+    "successBodyRevoked_other": "您之前的 {{count}} 个密钥已停用。请立即复制新密钥 — 之后将不再显示。",
+    "successBodyNoneRevoked": "请立即复制 — 之后将不再显示。"
   },
   "dashboard": {
     "title": "仪表盘",

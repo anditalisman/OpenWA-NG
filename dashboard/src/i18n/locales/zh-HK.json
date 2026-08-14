@@ -178,6 +178,7 @@
     "help": "需要協助？",
     "viewDocs": "查看文件",
     "requestApiKey": "沒有 API 金鑰？申請一個",
+    "forgotApiKey": "忘記了 API 金鑰？取回它",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "發送中...",
     "submittedTitle": "請查收電郵",
     "submittedBody": "如果 {{email}} 符合資格，驗證連結即將發送。點擊連結即可獲取您的 API 金鑰。",
+    "lostKeyInstead": "已經有金鑰但忘記了？改為取回金鑰",
     "backToLogin": "返回登入"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "請立即複製 — 之後將不再顯示。",
     "errorTitle": "驗證失敗",
     "missingToken": "此連結缺少驗證權杖。"
+  },
+  "forgotApiKey": {
+    "title": "取回您的 API 金鑰",
+    "subtitle": "輸入您的姓名和金鑰註冊所用的工作電郵 — 我們會發送驗證連結以簽發替換金鑰。",
+    "corporateEmailHint": "請使用您的公司/企業郵箱地址。來自個人或未識別網域的申請將不會收到金鑰。",
+    "nameLabel": "姓名",
+    "namePlaceholder": "例如：Budi Santoso",
+    "emailLabel": "工作電郵",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "姓名和電郵為必填項",
+    "submit": "發送取回電郵",
+    "submitting": "發送中...",
+    "submittedTitle": "請查收電郵",
+    "submittedBody": "如果 {{email}} 已註冊金鑰，取回連結即將發送。點擊連結後，舊金鑰會立即停用並簽發新金鑰。",
+    "requestNewInstead": "從未申請過金鑰？改為申請新金鑰"
+  },
+  "recoverApiKey": {
+    "successTitle": "您的 API 金鑰已取回",
+    "successBodyRevoked_one": "您之前的金鑰已停用。請立即複製新金鑰 — 之後將不再顯示。",
+    "successBodyRevoked_other": "您之前的 {{count}} 個金鑰已停用。請立即複製新金鑰 — 之後將不再顯示。",
+    "successBodyNoneRevoked": "請立即複製 — 之後將不再顯示。"
   },
   "dashboard": {
     "title": "控制面板",

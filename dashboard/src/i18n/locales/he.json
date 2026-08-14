@@ -185,6 +185,7 @@
     "help": "צריך עזרה?",
     "viewDocs": "לצפייה בתיעוד",
     "requestApiKey": "אין לך מפתח API? בקש אחד",
+    "forgotApiKey": "איבדת את מפתח ה-API שלך? שחזר אותו",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -200,6 +201,7 @@
     "submitting": "שולח...",
     "submittedTitle": "בדוק את הדוא\"ל שלך",
     "submittedBody": "אם {{email}} כשיר, קישור אימות בדרך אליך. לחץ עליו כדי לקבל את מפתח ה-API שלך.",
+    "lostKeyInstead": "כבר יש לך מפתח אבל איבדת אותו? שחזר אותו במקום זאת",
     "backToLogin": "חזרה להתחברות"
   },
   "verifyApiKey": {
@@ -208,6 +210,29 @@
     "successBody": "העתק אותו עכשיו — הוא לא יוצג שוב.",
     "errorTitle": "האימות נכשל",
     "missingToken": "לקישור זה חסר אסימון אימות."
+  },
+  "forgotApiKey": {
+    "title": "שחזור מפתח ה-API שלך",
+    "subtitle": "הזן את שמך ואת כתובת הדוא\"ל העסקית שאליה רשום המפתח שלך — נשלח קישור אימות להנפקת מפתח חלופי.",
+    "corporateEmailHint": "השתמש בכתובת הדוא\"ל הארגונית/של החברה שלך. בקשות מדומיינים אישיים או לא מוכרים לא יקבלו מפתח.",
+    "nameLabel": "השם שלך",
+    "namePlaceholder": "לדוגמה: Budi Santoso",
+    "emailLabel": "דוא\"ל עסקי",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "יש למלא שם וכתובת דוא\"ל",
+    "submit": "שלח דוא\"ל שחזור",
+    "submitting": "שולח...",
+    "submittedTitle": "בדוק את הדוא\"ל שלך",
+    "submittedBody": "אם ל-{{email}} יש מפתח רשום, קישור שחזור בדרך אליך. לחיצה עליו תשבית את המפתח הישן ותנפיק מפתח חדש.",
+    "requestNewInstead": "מעולם לא ביקשת מפתח? בקש אחד במקום זאת"
+  },
+  "recoverApiKey": {
+    "successTitle": "מפתח ה-API שלך שוחזר",
+    "successBodyRevoked_one": "המפתח הקודם שלך הושבת. העתק את החדש עכשיו — הוא לא יוצג שוב.",
+    "successBodyRevoked_two": "שני המפתחות הקודמים שלך הושבתו. העתק את החדש עכשיו — הוא לא יוצג שוב.",
+    "successBodyRevoked_many": "{{count}} מהמפתחות הקודמים שלך הושבתו. העתק את החדש עכשיו — הוא לא יוצג שוב.",
+    "successBodyRevoked_other": "{{count}} מהמפתחות הקודמים שלך הושבתו. העתק את החדש עכשיו — הוא לא יוצג שוב.",
+    "successBodyNoneRevoked": "העתק אותו עכשיו — הוא לא יוצג שוב."
   },
   "dashboard": {
     "title": "דאשבורד",
