@@ -107,6 +107,17 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ WEBHOOK_MAX_PER_SESSION: '0', WEBHOOK_MEDIA_INLINE_MAX_BYTES: '0' })).not.toThrow();
   });
 
+  it('rejects a non-integer audit retention but accepts every value documented as "disable"', () => {
+    expect(() => validateEnv({ AUDIT_RETENTION_DAYS: 'ninety' })).toThrow(/AUDIT_RETENTION_DAYS/);
+    expect(() => validateEnv({ AUDIT_RETENTION_DAYS: '90.5' })).toThrow(/AUDIT_RETENTION_DAYS/);
+    expect(() => validateEnv({ AUDIT_RETENTION_DAYS: '30d' })).toThrow(/AUDIT_RETENTION_DAYS/);
+    // audit.service.ts and docs/05 both document `<= 0` as the off switch, so BOTH spellings must
+    // boot. Requiring non-negative here would refuse to start on a configuration the docs advertise.
+    expect(() => validateEnv({ AUDIT_RETENTION_DAYS: '0' })).not.toThrow();
+    expect(() => validateEnv({ AUDIT_RETENTION_DAYS: '-1' })).not.toThrow();
+    expect(() => validateEnv({ AUDIT_RETENTION_DAYS: '90' })).not.toThrow();
+  });
+
   it('rejects a non-positive / non-integer WEBHOOK_MAX_PAYLOAD_BYTES (0 would reject every dispatch)', () => {
     expect(() => validateEnv({ WEBHOOK_MAX_PAYLOAD_BYTES: '0' })).toThrow(/WEBHOOK_MAX_PAYLOAD_BYTES/);
     expect(() => validateEnv({ WEBHOOK_MAX_PAYLOAD_BYTES: 'abc' })).toThrow(/WEBHOOK_MAX_PAYLOAD_BYTES/);
