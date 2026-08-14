@@ -214,11 +214,15 @@ export class SelfServiceApiKeyService {
   }
 
   /**
-   * Consumes a single-use "forgot key" token: revokes every active self-service key already linked
-   * to this email (ApiKey.selfServiceEmail), then issues a fresh OPERATOR key the same way
-   * verifyAndIssue does. Revoking directly via authService.revoke() is safe here without checking
-   * the last-usable-admin invariant ourselves — self-service keys are always role OPERATOR
+   * Consumes a single-use "forgot key" token: issues a fresh OPERATOR key the same way
+   * verifyAndIssue does, hands every session the old key(s) created over to it (see
+   * AuthService.reassignSessionOwnership — otherwise a non-admin key's session visibility resolves
+   * to "sessions this exact key id created", and a brand-new key id would see none of them), and
+   * only then revokes the old key(s). Revoking directly via authService.revoke() is safe here without
+   * checking the last-usable-admin invariant ourselves — self-service keys are always role OPERATOR
    * (verifyAndIssue never issues ADMIN), so revoke() can never strand the system through this path.
+   * Reassign-then-revoke (not the other way around) means a request that fails partway through never
+   * leaves a session orphaned under a key that's already gone.
    */
   async verifyAndRecover(
     token: string,
@@ -228,14 +232,16 @@ export class SelfServiceApiKeyService {
     const existingKeys = await this.apiKeyRepository.find({
       where: { selfServiceEmail: request.email, isActive: true },
     });
-    for (const key of existingKeys) {
-      await this.authService.revoke(key.id);
-    }
 
     const { apiKey, rawKey } = await this.authService.createApiKey(
       { name: request.name, role: ApiKeyRole.OPERATOR },
       request.email,
     );
+
+    for (const key of existingKeys) {
+      await this.authService.reassignSessionOwnership(key.id, apiKey.id);
+      await this.authService.revoke(key.id);
+    }
 
     request.consumedAt = new Date();
     await this.requestRepository.save(request);

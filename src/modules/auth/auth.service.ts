@@ -356,6 +356,18 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Reassigns every session `fromApiKeyId` currently owns (Session.createdByApiKeyId) to
+   * `toApiKeyId`. Used by the self-service "forgot key" recovery flow: the recovered key is a brand
+   * new id, so without this the sessions the old key created would resolve to an empty effective
+   * scope under resolveEffectiveAllowedSessions and silently disappear from the new key's view, even
+   * though the sessions themselves were never touched.
+   */
+  async reassignSessionOwnership(fromApiKeyId: string, toApiKeyId: string): Promise<number> {
+    const result = await this.sessionRepository.update({ createdByApiKeyId: fromApiKeyId }, { createdByApiKeyId: toApiKeyId });
+    return result.affected ?? 0;
+  }
+
+  /**
    * "Usable admin" for the last-admin invariant: an active, unexpired ADMIN key with NO session
    * scope. The key-lifecycle routes are fenced behind @RequireUnscopedKey (AuthController), so a
    * session-scoped admin can authenticate but can never manage keys — counting it as a surviving
