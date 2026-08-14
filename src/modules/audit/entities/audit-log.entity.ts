@@ -12,6 +12,10 @@ export enum AuditAction {
   // single-use verification link instead).
   API_KEY_SELF_SERVICE_REQUESTED = 'api_key_self_service_requested',
   API_KEY_SELF_SERVICE_ISSUED = 'api_key_self_service_issued',
+  // "Forgot key" recovery: same allow-list + single-use-link gating, but verification also revokes
+  // whatever active self-service key(s) the email already owned before issuing the replacement.
+  API_KEY_SELF_SERVICE_RECOVERY_REQUESTED = 'api_key_self_service_recovery_requested',
+  API_KEY_SELF_SERVICE_RECOVERED = 'api_key_self_service_recovered',
 
   // Rate-limit enforcement (sampled: at most one row per subject+kind per minute — see
   // EventsGateway — so enforcing a limit never becomes an audit-write flood of its own).

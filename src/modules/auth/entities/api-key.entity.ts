@@ -39,6 +39,15 @@ export class ApiKey {
   @Column({ type: 'boolean', default: true })
   isActive!: boolean;
 
+  // The verified email this key was self-issued to (SelfServiceApiKeyService.verifyAndIssue/
+  // verifyAndRecover) — null for a key an admin created directly via CreateApiKeyDto, which never
+  // exposes this field. This is what the "forgot key" recovery flow looks up by; a key issued
+  // before this column existed simply has null here and cannot be found by recovery (no way to
+  // backfill which email an already-issued key belongs to after the fact).
+  @Index()
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  selfServiceEmail!: string | null;
+
   @Column({ type: 'datetime', nullable: true })
   expiresAt!: Date | null;
 

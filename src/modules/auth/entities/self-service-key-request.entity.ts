@@ -1,5 +1,13 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
 
+export enum SelfServiceRequestPurpose {
+  // Issue a brand new key — the original flow, no pre-existing key involved.
+  ISSUE = 'issue',
+  // "Forgot key": on verification, revoke whatever active self-service key(s) this email owns and
+  // issue a replacement — see SelfServiceApiKeyService.verifyAndRecover.
+  RECOVER = 'recover',
+}
+
 /**
  * A pending (or already-consumed) self-service API key request: someone submitted their name and a
  * work email, and is waiting to click the emailed verification link. Lives on the 'main' connection,
@@ -12,6 +20,9 @@ import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 
 export class SelfServiceKeyRequest {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
+
+  @Column({ type: 'varchar', length: 20, default: SelfServiceRequestPurpose.ISSUE })
+  purpose!: SelfServiceRequestPurpose;
 
   @Column({ type: 'varchar', length: 100 })
   name!: string;

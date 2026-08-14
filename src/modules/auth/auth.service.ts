@@ -188,7 +188,16 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
     return this.apiKeyRepository.save(apiKey);
   }
 
-  async createApiKey(dto: CreateApiKeyDto): Promise<{ apiKey: ApiKey; rawKey: string }> {
+  /**
+   * `selfServiceEmail` is deliberately NOT part of CreateApiKeyDto (the HTTP-validated shape) — it
+   * must only ever be set by SelfServiceApiKeyService itself, from the email it already verified via
+   * the emailed token, never from a caller-supplied request body (that would let anyone claim
+   * ownership of an arbitrary email on a key an admin creates for them).
+   */
+  async createApiKey(
+    dto: CreateApiKeyDto,
+    selfServiceEmail?: string,
+  ): Promise<{ apiKey: ApiKey; rawKey: string }> {
     // Generate secure random key: owa_k1_<32 bytes hex>
     const rawKey = `owa_k1_${randomBytes(32).toString('hex')}`;
     const keyHash = this.hashKey(rawKey);
@@ -202,6 +211,7 @@ export class AuthService implements OnModuleInit, OnModuleDestroy {
       allowedIps: dto.allowedIps || null,
       allowedSessions: dto.allowedSessions || null,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      selfServiceEmail: selfServiceEmail ?? null,
     });
 
     const saved = await this.apiKeyRepository.save(apiKey);
