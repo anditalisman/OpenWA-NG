@@ -178,6 +178,7 @@
     "help": "Need help?",
     "viewDocs": "View Documentation",
     "requestApiKey": "Don't have an API key? Request one",
+    "forgotApiKey": "Lost your API key? Recover it",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "Sending...",
     "submittedTitle": "Check your email",
     "submittedBody": "If {{email}} is eligible, a verification link is on its way. Click it to receive your API key.",
+    "lostKeyInstead": "Already have a key but lost it? Recover it instead",
     "backToLogin": "Back to login"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "Copy it now — it will not be shown again.",
     "errorTitle": "Verification failed",
     "missingToken": "This link is missing its verification token."
+  },
+  "forgotApiKey": {
+    "title": "Recover Your API Key",
+    "subtitle": "Enter your name and the work email your key is registered to — we'll send a verification link to issue a replacement.",
+    "corporateEmailHint": "Use your corporate/company email address. Requests from personal or unrecognized domains will not receive a key.",
+    "nameLabel": "Your name",
+    "namePlaceholder": "e.g. Budi Santoso",
+    "emailLabel": "Work email",
+    "emailPlaceholder": "you@example.com",
+    "fieldsRequired": "Name and email are required",
+    "submit": "Send recovery email",
+    "submitting": "Sending...",
+    "submittedTitle": "Check your email",
+    "submittedBody": "If {{email}} has a key registered, a recovery link is on its way. Clicking it will deactivate the old key and issue a new one.",
+    "requestNewInstead": "Never requested a key before? Request one instead"
+  },
+  "recoverApiKey": {
+    "successTitle": "Your API key has been recovered",
+    "successBodyRevoked_one": "Your previous key has been deactivated. Copy the new one now — it will not be shown again.",
+    "successBodyRevoked_other": "Your {{count}} previous keys have been deactivated. Copy the new one now — it will not be shown again.",
+    "successBodyNoneRevoked": "Copy it now — it will not be shown again."
   },
   "dashboard": {
     "title": "Dashboard",

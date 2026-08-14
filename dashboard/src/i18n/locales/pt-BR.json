@@ -178,6 +178,7 @@
     "help": "Precisa de ajuda?",
     "viewDocs": "Ver documentação",
     "requestApiKey": "Não tem uma chave de API? Solicite uma",
+    "forgotApiKey": "Perdeu sua chave de API? Recupere-a",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "Enviando...",
     "submittedTitle": "Verifique seu e-mail",
     "submittedBody": "Se {{email}} for elegível, um link de verificação está a caminho. Clique nele para receber sua chave de API.",
+    "lostKeyInstead": "Já tem uma chave mas a perdeu? Recupere-a em vez disso",
     "backToLogin": "Voltar ao login"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "Copie agora — ela não será exibida novamente.",
     "errorTitle": "Falha na verificação",
     "missingToken": "Este link está sem o token de verificação."
+  },
+  "forgotApiKey": {
+    "title": "Recuperar sua chave de API",
+    "subtitle": "Informe seu nome e o e-mail corporativo ao qual sua chave está registrada — enviaremos um link de verificação para emitir uma chave substituta.",
+    "corporateEmailHint": "Use seu endereço de e-mail corporativo/da empresa. Solicitações de domínios pessoais ou não reconhecidos não receberão uma chave.",
+    "nameLabel": "Seu nome",
+    "namePlaceholder": "ex: Budi Santoso",
+    "emailLabel": "E-mail corporativo",
+    "emailPlaceholder": "voce@exemplo.com",
+    "fieldsRequired": "Nome e e-mail são obrigatórios",
+    "submit": "Enviar e-mail de recuperação",
+    "submitting": "Enviando...",
+    "submittedTitle": "Verifique seu e-mail",
+    "submittedBody": "Se {{email}} tiver uma chave registrada, um link de recuperação está a caminho. Ao clicar nele, a chave antiga será desativada e uma nova será emitida.",
+    "requestNewInstead": "Nunca solicitou uma chave? Solicite uma em vez disso"
+  },
+  "recoverApiKey": {
+    "successTitle": "Sua chave de API foi recuperada",
+    "successBodyRevoked_one": "Sua chave anterior foi desativada. Copie a nova agora — ela não será exibida novamente.",
+    "successBodyRevoked_other": "Suas {{count}} chaves anteriores foram desativadas. Copie a nova agora — ela não será exibida novamente.",
+    "successBodyNoneRevoked": "Copie agora — ela não será exibida novamente."
   },
   "dashboard": {
     "title": "Painel",

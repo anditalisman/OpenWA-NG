@@ -178,6 +178,7 @@
     "help": "Brauchst du Hilfe?",
     "viewDocs": "Dokumentation ansehen",
     "requestApiKey": "Kein API-Schlüssel? Jetzt anfordern",
+    "forgotApiKey": "API-Schlüssel verloren? Wiederherstellen",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "Wird gesendet...",
     "submittedTitle": "Prüfen Sie Ihre E-Mails",
     "submittedBody": "Wenn {{email}} berechtigt ist, ist ein Bestätigungslink unterwegs. Klicken Sie darauf, um Ihren API-Schlüssel zu erhalten.",
+    "lostKeyInstead": "Haben Sie bereits einen Schlüssel, aber ihn verloren? Stattdessen wiederherstellen",
     "backToLogin": "Zurück zur Anmeldung"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "Kopieren Sie ihn jetzt — er wird nicht erneut angezeigt.",
     "errorTitle": "Verifizierung fehlgeschlagen",
     "missingToken": "Diesem Link fehlt das Bestätigungstoken."
+  },
+  "forgotApiKey": {
+    "title": "API-Schlüssel wiederherstellen",
+    "subtitle": "Geben Sie Ihren Namen und die dienstliche E-Mail-Adresse ein, für die Ihr Schlüssel registriert ist — wir senden Ihnen einen Bestätigungslink zur Ausstellung eines Ersatzschlüssels.",
+    "corporateEmailHint": "Verwenden Sie Ihre geschäftliche E-Mail-Adresse. Anfragen von privaten oder unbekannten Domains erhalten keinen Schlüssel.",
+    "nameLabel": "Ihr Name",
+    "namePlaceholder": "z. B. Budi Santoso",
+    "emailLabel": "Dienstliche E-Mail",
+    "emailPlaceholder": "sie@beispiel.com",
+    "fieldsRequired": "Name und E-Mail sind erforderlich",
+    "submit": "Wiederherstellungs-E-Mail senden",
+    "submitting": "Wird gesendet...",
+    "submittedTitle": "Prüfen Sie Ihre E-Mails",
+    "submittedBody": "Wenn für {{email}} ein Schlüssel registriert ist, ist ein Wiederherstellungslink unterwegs. Ein Klick darauf deaktiviert den alten Schlüssel und stellt einen neuen aus.",
+    "requestNewInstead": "Noch nie einen Schlüssel angefordert? Stattdessen einen anfordern"
+  },
+  "recoverApiKey": {
+    "successTitle": "Ihr API-Schlüssel wurde wiederhergestellt",
+    "successBodyRevoked_one": "Ihr vorheriger Schlüssel wurde deaktiviert. Kopieren Sie den neuen jetzt — er wird nicht erneut angezeigt.",
+    "successBodyRevoked_other": "Ihre {{count}} vorherigen Schlüssel wurden deaktiviert. Kopieren Sie den neuen jetzt — er wird nicht erneut angezeigt.",
+    "successBodyNoneRevoked": "Kopieren Sie ihn jetzt — er wird nicht erneut angezeigt."
   },
   "dashboard": {
     "title": "Dashboard",

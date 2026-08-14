@@ -178,6 +178,7 @@
     "help": "Serve aiuto?",
     "viewDocs": "Visualizza la documentazione",
     "requestApiKey": "Non hai una chiave API? Richiedine una",
+    "forgotApiKey": "Hai perso la tua chiave API? Recuperala",
     "version": "v{{version}} · {{date}}"
   },
   "requestApiKey": {
@@ -193,6 +194,7 @@
     "submitting": "Invio in corso...",
     "submittedTitle": "Controlla la tua email",
     "submittedBody": "Se {{email}} è idoneo, un link di verifica è in arrivo. Cliccalo per ricevere la tua chiave API.",
+    "lostKeyInstead": "Hai già una chiave ma l'hai persa? Recuperala invece",
     "backToLogin": "Torna al login"
   },
   "verifyApiKey": {
@@ -201,6 +203,27 @@
     "successBody": "Copiala ora — non verrà mostrata di nuovo.",
     "errorTitle": "Verifica non riuscita",
     "missingToken": "A questo link manca il token di verifica."
+  },
+  "forgotApiKey": {
+    "title": "Recupera la tua chiave API",
+    "subtitle": "Inserisci il tuo nome e l'email di lavoro a cui è registrata la tua chiave — ti invieremo un link di verifica per emettere una chiave sostitutiva.",
+    "corporateEmailHint": "Utilizza il tuo indirizzo e-mail aziendale/di lavoro. Le richieste da domini personali o non riconosciuti non riceveranno una chiave.",
+    "nameLabel": "Il tuo nome",
+    "namePlaceholder": "es. Budi Santoso",
+    "emailLabel": "Email di lavoro",
+    "emailPlaceholder": "tu@esempio.com",
+    "fieldsRequired": "Nome ed email sono obbligatori",
+    "submit": "Invia email di recupero",
+    "submitting": "Invio in corso...",
+    "submittedTitle": "Controlla la tua email",
+    "submittedBody": "Se {{email}} ha una chiave registrata, un link di recupero è in arrivo. Cliccandolo, la vecchia chiave verrà disattivata e ne verrà emessa una nuova.",
+    "requestNewInstead": "Non hai mai richiesto una chiave? Richiedine una invece"
+  },
+  "recoverApiKey": {
+    "successTitle": "La tua chiave API è stata recuperata",
+    "successBodyRevoked_one": "La tua chiave precedente è stata disattivata. Copia quella nuova ora — non verrà mostrata di nuovo.",
+    "successBodyRevoked_other": "Le tue {{count}} chiavi precedenti sono state disattivate. Copia quella nuova ora — non verrà mostrata di nuovo.",
+    "successBodyNoneRevoked": "Copiala ora — non verrà mostrata di nuovo."
   },
   "dashboard": {
     "title": "Dashboard",
