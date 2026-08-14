@@ -17,6 +17,7 @@ function createMockApiKey(overrides: Partial<ApiKey> = {}): ApiKey {
     allowedIps: null,
     allowedSessions: null,
     isActive: true,
+    selfServiceEmail: null,
     expiresAt: null,
     lastUsedAt: null,
     usageCount: 0,

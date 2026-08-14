@@ -51,3 +51,8 @@ export class VerifySelfServiceApiKeyResponseDto {
   @ApiProperty()
   role!: string;
 }
+
+export class VerifyForgotApiKeyResponseDto extends VerifySelfServiceApiKeyResponseDto {
+  @ApiProperty({ description: 'How many previously active self-service keys for this email were revoked' })
+  revokedCount!: number;
+}

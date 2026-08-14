@@ -21,7 +21,12 @@ describe('SelfServiceApiKeyController — audit logging + response shape', () =>
   const makeReq = (): Request =>
     ({ method: 'POST', path: '/auth/api-keys/self-service/request' }) as unknown as Request;
 
-  let selfServiceService: { requestKey: jest.Mock; verifyAndIssue: jest.Mock };
+  let selfServiceService: {
+    requestKey: jest.Mock;
+    verifyAndIssue: jest.Mock;
+    requestRecovery: jest.Mock;
+    verifyAndRecover: jest.Mock;
+  };
   let auditService: { logInfo: jest.Mock };
   let controller: SelfServiceApiKeyController;
 
@@ -32,6 +37,13 @@ describe('SelfServiceApiKeyController — audit logging + response shape', () =>
         apiKey: { id: 'k1', name: 'Budi', role: ApiKeyRole.OPERATOR } as ApiKey,
         rawKey: 'owa_k1_raw',
         request: { email: 'budi@ptamgirimenang.com' } as SelfServiceKeyRequest,
+      }),
+      requestRecovery: jest.fn().mockResolvedValue(undefined),
+      verifyAndRecover: jest.fn().mockResolvedValue({
+        apiKey: { id: 'k2', name: 'Budi', role: ApiKeyRole.OPERATOR } as ApiKey,
+        rawKey: 'owa_k1_new',
+        request: { email: 'budi@ptamgirimenang.com' } as SelfServiceKeyRequest,
+        revokedCount: 1,
       }),
     };
     auditService = { logInfo: jest.fn().mockResolvedValue(null) };
@@ -64,6 +76,30 @@ describe('SelfServiceApiKeyController — audit logging + response shape', () =>
       AuditAction.API_KEY_SELF_SERVICE_ISSUED,
       expect.objectContaining({
         metadata: { targetKeyId: 'k1', targetKeyName: 'Budi', email: 'budi@ptamgirimenang.com' },
+      }),
+    );
+  });
+
+  it('forgot() always returns {submitted:true} and audits with the (lowercased) email in metadata', async () => {
+    const res = await controller.forgot({ name: 'Budi', email: 'Budi@Example.com' }, makeReq());
+    expect(res).toEqual({ submitted: true });
+    expect(selfServiceService.requestRecovery).toHaveBeenCalledWith(
+      { name: 'Budi', email: 'Budi@Example.com' },
+      expect.any(String),
+    );
+    expect(auditService.logInfo).toHaveBeenCalledWith(
+      AuditAction.API_KEY_SELF_SERVICE_RECOVERY_REQUESTED,
+      expect.objectContaining({ metadata: { email: 'budi@example.com', name: 'Budi' } }),
+    );
+  });
+
+  it('forgotVerify() returns the replacement key + revokedCount and audits the recovery', async () => {
+    const res = await controller.forgotVerify({ token: 'tok' }, makeReq());
+    expect(res).toEqual({ id: 'k2', name: 'Budi', apiKey: 'owa_k1_new', role: ApiKeyRole.OPERATOR, revokedCount: 1 });
+    expect(auditService.logInfo).toHaveBeenCalledWith(
+      AuditAction.API_KEY_SELF_SERVICE_RECOVERED,
+      expect.objectContaining({
+        metadata: { targetKeyId: 'k2', targetKeyName: 'Budi', email: 'budi@ptamgirimenang.com', revokedCount: 1 },
       }),
     );
   });

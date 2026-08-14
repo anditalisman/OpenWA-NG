@@ -33,6 +33,7 @@ function makeRow(overrides: Partial<ApiKey> = {}): ApiKey {
     allowedIps: null,
     allowedSessions: null,
     isActive: true,
+    selfServiceEmail: null,
     expiresAt: null,
     lastUsedAt: null,
     usageCount: 5,
