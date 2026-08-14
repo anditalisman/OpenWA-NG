@@ -576,7 +576,7 @@ export class WwebjsGroups {
       // which upstream itself never hands a bare number, appending '@c.us' first. Unqualified it
       // threw inside the minified bundle and the caller got an undiagnosable 500, while the same
       // input succeeded on Baileys. `null` still means every pending request.
-      requesterIds: participants?.map(toParticipantWid) ?? null,
+      requesterIds: participants?.map(p => (p.includes('@') ? p : `${p}@c.us`)) ?? null,
       sleep: [250, 500],
     });
     // {requesterId, error?, message} per requester; requesterId is a page-context value that can
