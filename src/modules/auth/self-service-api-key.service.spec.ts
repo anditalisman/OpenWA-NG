@@ -18,6 +18,7 @@ describe('SelfServiceApiKeyService', () => {
       [{ name: string; role?: ApiKeyRole }, string?]
     >;
     revoke: jest.Mock<Promise<ApiKey>, [string]>;
+    reassignSessionOwnership: jest.Mock<Promise<number>, [string, string]>;
   };
   let mailService: { send: jest.Mock<Promise<void>, [SendMailOptions]> };
   const ENV_KEYS = [
@@ -53,6 +54,7 @@ describe('SelfServiceApiKeyService', () => {
           rawKey: 'owa_k1_rawkey',
         }),
       revoke: jest.fn<Promise<ApiKey>, [string]>().mockImplementation(async (id: string) => ({ id }) as ApiKey),
+      reassignSessionOwnership: jest.fn<Promise<number>, [string, string]>().mockResolvedValue(0),
     };
     mailService = { send: jest.fn<Promise<void>, [SendMailOptions]>().mockResolvedValue(undefined) };
 
@@ -286,6 +288,25 @@ describe('SelfServiceApiKeyService', () => {
       );
       expect(result.rawKey).toBe('owa_k1_rawkey');
 
+      // Sessions the old keys created must transfer to the new key id (key-1, per the mock), or the
+      // user's already-created sessions would resolve to an empty scope and vanish — see
+      // AuthService.reassignSessionOwnership.
+      expect(authService.reassignSessionOwnership).toHaveBeenCalledTimes(2);
+      expect(authService.reassignSessionOwnership.mock.calls.map(c => c[0]).sort()).toEqual(['old-1', 'old-2']);
+      for (const call of authService.reassignSessionOwnership.mock.calls) {
+        expect(call[1]).toBe('key-1');
+      }
+      // Ordering matters: the new key must exist, and ownership must transfer, before the old key is
+      // revoked — otherwise a request that dies mid-flight could leave a session orphaned under a
+      // key that's already gone.
+      const createOrder = authService.createApiKey.mock.invocationCallOrder[0];
+      for (let i = 0; i < authService.reassignSessionOwnership.mock.calls.length; i++) {
+        const reassignOrder = authService.reassignSessionOwnership.mock.invocationCallOrder[i];
+        const revokeOrder = authService.revoke.mock.invocationCallOrder[i];
+        expect(reassignOrder).toBeGreaterThan(createOrder);
+        expect(revokeOrder).toBeGreaterThan(reassignOrder);
+      }
+
       const row = await ds.getRepository(SelfServiceKeyRequest).findOneOrFail({ where: {} });
       expect(row.consumedAt).not.toBeNull();
     });
@@ -294,6 +315,7 @@ describe('SelfServiceApiKeyService', () => {
       const token = await seedRecoveryRequest();
       const result = await service.verifyAndRecover(token);
       expect(authService.revoke).not.toHaveBeenCalled();
+      expect(authService.reassignSessionOwnership).not.toHaveBeenCalled();
       expect(result.revokedCount).toBe(0);
     });
 
@@ -308,6 +330,7 @@ describe('SelfServiceApiKeyService', () => {
       await expect(service.verifyAndRecover(token)).rejects.toThrow(GoneException);
       expect(authService.revoke).not.toHaveBeenCalled();
       expect(authService.createApiKey).not.toHaveBeenCalled();
+      expect(authService.reassignSessionOwnership).not.toHaveBeenCalled();
     });
   });
 });

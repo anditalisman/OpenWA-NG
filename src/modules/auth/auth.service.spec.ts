@@ -109,6 +109,7 @@ describe('AuthService', () => {
     // default (no created-sessions test needs it) — tests exercising that branch override it.
     sessionRepository = {
       find: jest.fn().mockResolvedValue([]),
+      update: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -435,6 +436,36 @@ describe('AuthService', () => {
       await expect(service.revoke('uuid-1')).rejects.toThrow(/last active admin/i);
       expect(repository.save).not.toHaveBeenCalled();
       expect(key.isActive).toBe(true);
+    });
+  });
+
+  describe('reassignSessionOwnership', () => {
+    it('updates every session owned by the source key to the target key id', async () => {
+      (sessionRepository.update as jest.Mock).mockResolvedValue({ affected: 2 });
+
+      const count = await service.reassignSessionOwnership('old-key', 'new-key');
+
+      expect(sessionRepository.update).toHaveBeenCalledWith(
+        { createdByApiKeyId: 'old-key' },
+        { createdByApiKeyId: 'new-key' },
+      );
+      expect(count).toBe(2);
+    });
+
+    it('returns 0 when the source key owns no sessions', async () => {
+      (sessionRepository.update as jest.Mock).mockResolvedValue({ affected: 0 });
+
+      const count = await service.reassignSessionOwnership('old-key', 'new-key');
+
+      expect(count).toBe(0);
+    });
+
+    it('returns 0 (not undefined) when the driver reports no affected count', async () => {
+      (sessionRepository.update as jest.Mock).mockResolvedValue({});
+
+      const count = await service.reassignSessionOwnership('old-key', 'new-key');
+
+      expect(count).toBe(0);
     });
   });
 
