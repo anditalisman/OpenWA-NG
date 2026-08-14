@@ -215,31 +215,43 @@ export class SelfServiceApiKeyService {
 
   /**
    * Consumes a single-use "forgot key" token: issues a fresh OPERATOR key the same way
-   * verifyAndIssue does, hands every session the old key(s) created over to it (see
+   * verifyAndIssue does, hands every session ANY key this email has ever owned over to it (see
    * AuthService.reassignSessionOwnership — otherwise a non-admin key's session visibility resolves
    * to "sessions this exact key id created", and a brand-new key id would see none of them), and
-   * only then revokes the old key(s). Revoking directly via authService.revoke() is safe here without
-   * checking the last-usable-admin invariant ourselves — self-service keys are always role OPERATOR
-   * (verifyAndIssue never issues ADMIN), so revoke() can never strand the system through this path.
-   * Reassign-then-revoke (not the other way around) means a request that fails partway through never
-   * leaves a session orphaned under a key that's already gone.
+   * only then revokes the still-active old key(s).
+   *
+   * Reassignment deliberately runs over every key ever linked to this email, not just the currently
+   * active one(s): if a prior recovery already happened (e.g. before this reassignment logic
+   * existed, or a second recovery run back-to-back), the *previous* key is already inactive and
+   * would otherwise be silently excluded forever — permanently orphaning whatever sessions it still
+   * owns, even though the email is unambiguous proof of ownership. Revoking stays restricted to the
+   * active ones: revoke() on an already-inactive key would just be redundant audit noise.
+   *
+   * Revoking directly via authService.revoke() is safe here without checking the last-usable-admin
+   * invariant ourselves — self-service keys are always role OPERATOR (verifyAndIssue never issues
+   * ADMIN), so revoke() can never strand the system through this path. Reassign-then-revoke (not the
+   * other way around) means a request that fails partway through never leaves a session orphaned
+   * under a key that's already gone.
    */
   async verifyAndRecover(
     token: string,
   ): Promise<{ apiKey: ApiKey; rawKey: string; request: SelfServiceKeyRequest; revokedCount: number }> {
     const request = await this.consumeRequest(token, SelfServiceRequestPurpose.RECOVER);
 
-    const existingKeys = await this.apiKeyRepository.find({
-      where: { selfServiceEmail: request.email, isActive: true },
+    const allKeysForEmail = await this.apiKeyRepository.find({
+      where: { selfServiceEmail: request.email },
     });
+    const activeKeys = allKeysForEmail.filter(key => key.isActive);
 
     const { apiKey, rawKey } = await this.authService.createApiKey(
       { name: request.name, role: ApiKeyRole.OPERATOR },
       request.email,
     );
 
-    for (const key of existingKeys) {
+    for (const key of allKeysForEmail) {
       await this.authService.reassignSessionOwnership(key.id, apiKey.id);
+    }
+    for (const key of activeKeys) {
       await this.authService.revoke(key.id);
     }
 
@@ -250,9 +262,10 @@ export class SelfServiceApiKeyService {
       requestId: request.id,
       keyId: apiKey.id,
       email: request.email,
-      revokedCount: existingKeys.length,
+      revokedCount: activeKeys.length,
+      reassignedFromKeyCount: allKeysForEmail.length,
     });
 
-    return { apiKey, rawKey, request, revokedCount: existingKeys.length };
+    return { apiKey, rawKey, request, revokedCount: activeKeys.length };
   }
 }

@@ -256,7 +256,9 @@ describe('SelfServiceApiKeyService', () => {
           selfServiceEmail: 'budi@ptamgirimenang.com',
           isActive: true,
         },
-        // Already-revoked key for the same email: must not be revoked again.
+        // Already-revoked key for the same email (e.g. from a prior recovery): must not be revoked
+        // again, but any session it still owns must still be pulled over to the new key — that's
+        // exactly the case a session left permanently orphaned by an earlier recovery needs.
         {
           id: 'old-3-inactive',
           name: 'old 3',
@@ -288,24 +290,29 @@ describe('SelfServiceApiKeyService', () => {
       );
       expect(result.rawKey).toBe('owa_k1_rawkey');
 
-      // Sessions the old keys created must transfer to the new key id (key-1, per the mock), or the
-      // user's already-created sessions would resolve to an empty scope and vanish — see
-      // AuthService.reassignSessionOwnership.
-      expect(authService.reassignSessionOwnership).toHaveBeenCalledTimes(2);
-      expect(authService.reassignSessionOwnership.mock.calls.map(c => c[0]).sort()).toEqual(['old-1', 'old-2']);
+      // Sessions from EVERY key ever linked to this email — including the already-inactive one —
+      // must transfer to the new key id (key-1, per the mock), or a session left behind by an
+      // earlier recovery would stay orphaned forever (its owning key is inactive, so it would never
+      // show up in an "active keys" lookup again). Otherwise a non-admin key with no explicit
+      // allowedSessions resolves its visible sessions to "sessions this exact key id created" and a
+      // brand-new key id would see none of them — see AuthService.reassignSessionOwnership.
+      expect(authService.reassignSessionOwnership).toHaveBeenCalledTimes(3);
+      expect(authService.reassignSessionOwnership.mock.calls.map(c => c[0]).sort()).toEqual([
+        'old-1',
+        'old-2',
+        'old-3-inactive',
+      ]);
       for (const call of authService.reassignSessionOwnership.mock.calls) {
         expect(call[1]).toBe('key-1');
       }
-      // Ordering matters: the new key must exist, and ownership must transfer, before the old key is
-      // revoked — otherwise a request that dies mid-flight could leave a session orphaned under a
-      // key that's already gone.
+      // Ordering matters: the new key must exist, and every reassignment must land, before any old
+      // key is revoked — otherwise a request that dies mid-flight could leave a session orphaned
+      // under a key that's already gone.
       const createOrder = authService.createApiKey.mock.invocationCallOrder[0];
-      for (let i = 0; i < authService.reassignSessionOwnership.mock.calls.length; i++) {
-        const reassignOrder = authService.reassignSessionOwnership.mock.invocationCallOrder[i];
-        const revokeOrder = authService.revoke.mock.invocationCallOrder[i];
-        expect(reassignOrder).toBeGreaterThan(createOrder);
-        expect(revokeOrder).toBeGreaterThan(reassignOrder);
-      }
+      const lastReassignOrder = Math.max(...authService.reassignSessionOwnership.mock.invocationCallOrder);
+      const firstRevokeOrder = Math.min(...authService.revoke.mock.invocationCallOrder);
+      expect(Math.min(...authService.reassignSessionOwnership.mock.invocationCallOrder)).toBeGreaterThan(createOrder);
+      expect(firstRevokeOrder).toBeGreaterThan(lastReassignOrder);
 
       const row = await ds.getRepository(SelfServiceKeyRequest).findOneOrFail({ where: {} });
       expect(row.consumedAt).not.toBeNull();
@@ -317,6 +324,27 @@ describe('SelfServiceApiKeyService', () => {
       expect(authService.revoke).not.toHaveBeenCalled();
       expect(authService.reassignSessionOwnership).not.toHaveBeenCalled();
       expect(result.revokedCount).toBe(0);
+    });
+
+    it('self-heals a session orphaned by an earlier recovery: reassigns from a long-inactive key even when no active key exists', async () => {
+      // Simulates the exact failure this test file used to miss: a first recovery already
+      // happened (that old key is now inactive) but never reassigned its session — recovering
+      // again must still find and repair it, not just handle keys that are currently active.
+      await ds.getRepository(ApiKey).insert({
+        id: 'orphaned-owner',
+        name: 'orphaned owner',
+        keyHash: 'h9',
+        keyPrefix: 'p9',
+        selfServiceEmail: 'budi@ptamgirimenang.com',
+        isActive: false,
+      });
+
+      const token = await seedRecoveryRequest();
+      const result = await service.verifyAndRecover(token);
+
+      expect(authService.revoke).not.toHaveBeenCalled();
+      expect(result.revokedCount).toBe(0);
+      expect(authService.reassignSessionOwnership).toHaveBeenCalledWith('orphaned-owner', 'key-1');
     });
 
     it('rejects reusing an already-consumed recovery token', async () => {
