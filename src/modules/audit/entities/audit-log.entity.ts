@@ -16,6 +16,9 @@ export enum AuditAction {
   // whatever active self-service key(s) the email already owned before issuing the replacement.
   API_KEY_SELF_SERVICE_RECOVERY_REQUESTED = 'api_key_self_service_recovery_requested',
   API_KEY_SELF_SERVICE_RECOVERED = 'api_key_self_service_recovered',
+  // reCAPTCHA rejected the request/forgot submission (missing token, Google reported failure, or a
+  // v3 score below RECAPTCHA_MIN_SCORE) — only ever emitted while RECAPTCHA_ENABLED=true.
+  API_KEY_SELF_SERVICE_RECAPTCHA_FAILED = 'api_key_self_service_recaptcha_failed',
 
   // Rate-limit enforcement (sampled: at most one row per subject+kind per minute — see
   // EventsGateway — so enforcing a limit never becomes an audit-write flood of its own).

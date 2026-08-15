@@ -3,10 +3,12 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { MailCheck } from 'lucide-react';
 import { selfServiceApi } from '../services/api';
+import { useRecaptcha } from '../hooks/useRecaptcha';
 import './Login.css';
 
 export function RequestApiKey() {
   const { t } = useTranslation();
+  const { getToken } = useRecaptcha();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,7 +24,8 @@ export function RequestApiKey() {
     setIsLoading(true);
     setError('');
     try {
-      await selfServiceApi.request({ name: name.trim(), email: email.trim() });
+      const recaptchaToken = await getToken('self_service_request');
+      await selfServiceApi.request({ name: name.trim(), email: email.trim(), recaptchaToken });
       // Always show the same "check your email" result, whether or not the domain is actually
       // allow-listed — the backend deliberately never reveals that, so the UI can't either.
       setSubmitted(true);

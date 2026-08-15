@@ -915,7 +915,11 @@ export const apiKeyApi = {
 // =============================================================================
 
 export const selfServiceApi = {
-  request: (data: { name: string; email: string }) =>
+  // Whether the two forms below require a reCAPTCHA token, and the public site key to render the
+  // widget with. Safe to call unauthenticated — this is itself one of the @Public routes.
+  getRecaptchaConfig: () =>
+    request<{ enabled: boolean; siteKey: string | null }>('/auth/api-keys/self-service/recaptcha-config'),
+  request: (data: { name: string; email: string; recaptchaToken?: string }) =>
     request<{ submitted: boolean }>('/auth/api-keys/self-service/request', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -927,7 +931,7 @@ export const selfServiceApi = {
     }),
   // "Forgot key": on verification every active self-service key already linked to the email is
   // revoked and replaced — revokedCount tells the UI whether that actually happened.
-  requestRecovery: (data: { name: string; email: string }) =>
+  requestRecovery: (data: { name: string; email: string; recaptchaToken?: string }) =>
     request<{ submitted: boolean }>('/auth/api-keys/self-service/forgot', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -363,6 +363,9 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     // self-service key flow off, or (for SMTP_SECURE) sends over what the operator believes is TLS.
     'SELF_SERVICE_API_KEYS_ENABLED',
     'SMTP_SECURE',
+    // Read with `=== 'true'` by RecaptchaService: a typo silently leaves the self-service forms
+    // unprotected against bot abuse, the exact failure mode this flag exists to prevent.
+    'RECAPTCHA_ENABLED',
     // Perf/observability only, but same silent-typo class.
     'CACHE_ENABLED',
     'DATABASE_LOGGING',
@@ -436,6 +439,27 @@ export function validateEnv(config: EnvConfig): EnvConfig {
         'DASHBOARD_URL (or BASE_URL) is required when SELF_SERVICE_API_KEYS_ENABLED=true, to build the ' +
           'verification link sent by email',
       );
+    }
+  }
+
+  // reCAPTCHA gates the same unauthenticated self-service forms above against bot abuse. The site
+  // key is public (the dashboard embeds it in the widget) and the secret key is what
+  // RecaptchaService presents to Google's siteverify — without either, turning the flag on would
+  // boot fine and then reject every submission with "reCAPTCHA is misconfigured" (missing secret)
+  // or render a widget that can never produce a valid token (missing site key).
+  if (str('RECAPTCHA_ENABLED') === 'true') {
+    if (!str('RECAPTCHA_SECRET_KEY')) {
+      errors.push('RECAPTCHA_SECRET_KEY is required when RECAPTCHA_ENABLED=true');
+    }
+    if (!str('RECAPTCHA_SITE_KEY')) {
+      errors.push('RECAPTCHA_SITE_KEY is required when RECAPTCHA_ENABLED=true');
+    }
+  }
+  const recaptchaMinScore = str('RECAPTCHA_MIN_SCORE');
+  if (recaptchaMinScore !== undefined) {
+    const n = Number(recaptchaMinScore);
+    if (!Number.isFinite(n) || n < 0 || n > 1) {
+      errors.push(`RECAPTCHA_MIN_SCORE must be a number between 0 and 1 (got "${recaptchaMinScore}")`);
     }
   }
 

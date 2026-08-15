@@ -1,5 +1,5 @@
-import { IsEmail, IsString, MinLength, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RequestSelfServiceApiKeyDto {
   @ApiProperty({
@@ -18,6 +18,28 @@ export class RequestSelfServiceApiKeyDto {
   @IsEmail()
   @MaxLength(255)
   email!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Google reCAPTCHA v3 token from the widget. Required (and verified server-side) only when ' +
+      'RECAPTCHA_ENABLED=true on this instance; ignored otherwise.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  recaptchaToken?: string;
+}
+
+export class RecaptchaConfigResponseDto {
+  @ApiProperty({ description: 'Whether the self-service forms require a reCAPTCHA token' })
+  enabled!: boolean;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'The public site key to render the widget with, or null while disabled',
+  })
+  siteKey!: string | null;
 }
 
 export class RequestSelfServiceApiKeyResponseDto {
