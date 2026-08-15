@@ -1,14 +1,16 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { SelfServiceApiKeyService } from './self-service-api-key.service';
+import { RecaptchaService } from './recaptcha.service';
 import {
   RequestSelfServiceApiKeyDto,
   RequestSelfServiceApiKeyResponseDto,
   VerifySelfServiceApiKeyDto,
   VerifySelfServiceApiKeyResponseDto,
   VerifyForgotApiKeyResponseDto,
+  RecaptchaConfigResponseDto,
 } from './dto';
 import { Public } from './decorators/auth.decorators';
 import { AuditService } from '../audit/audit.service';
@@ -27,6 +29,7 @@ import { resolveClientIp } from '../../common/utils/ip';
 export class SelfServiceApiKeyController {
   constructor(
     private readonly selfServiceService: SelfServiceApiKeyService,
+    private readonly recaptchaService: RecaptchaService,
     private readonly auditService: AuditService,
     private readonly configService: ConfigService,
   ) {}
@@ -36,10 +39,47 @@ export class SelfServiceApiKeyController {
     return resolveClientIp(request, trustedProxies);
   }
 
+  /**
+   * Verifies dto.recaptchaToken for the given action, auditing (and rethrowing) a rejection — same
+   * catch-audit-rethrow shape as ApiKeyGuard for API_KEY_AUTH_FAILED. No-ops when RECAPTCHA_ENABLED
+   * is not 'true', so this can be called unconditionally from every public entry point below.
+   */
+  private async assertHuman(
+    recaptchaToken: string | undefined,
+    action: string,
+    req: Request,
+    ipAddress: string,
+    email: string,
+  ): Promise<void> {
+    try {
+      await this.recaptchaService.assertHuman(recaptchaToken, action, ipAddress);
+    } catch (err) {
+      await this.auditService.logWarn(AuditAction.API_KEY_SELF_SERVICE_RECAPTCHA_FAILED, {
+        ipAddress,
+        method: req.method,
+        path: req.path,
+        errorMessage: err instanceof Error ? err.message : String(err),
+        metadata: { email, action },
+      });
+      throw err;
+    }
+  }
+
+  @Get('recaptcha-config')
+  @ApiOperation({ summary: 'Whether the self-service forms require reCAPTCHA, and the site key to render it with' })
+  @ApiResponse({ status: 200, description: 'reCAPTCHA config', type: RecaptchaConfigResponseDto })
+  recaptchaConfig(): RecaptchaConfigResponseDto {
+    return { enabled: this.recaptchaService.isEnabled(), siteKey: this.recaptchaService.siteKey() };
+  }
+
   @Post('request')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a self-service API key (sends a verification email)' })
   @ApiResponse({ status: 200, description: 'Accepted for processing', type: RequestSelfServiceApiKeyResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'reCAPTCHA verification failed (only when RECAPTCHA_ENABLED=true on this instance)',
+  })
   @ApiResponse({
     status: 503,
     description:
@@ -50,6 +90,7 @@ export class SelfServiceApiKeyController {
     @Req() req: Request,
   ): Promise<RequestSelfServiceApiKeyResponseDto> {
     const ipAddress = this.getClientIp(req);
+    await this.assertHuman(dto.recaptchaToken, 'self_service_request', req, ipAddress, dto.email);
     await this.selfServiceService.requestKey(dto, ipAddress);
     await this.auditService.logInfo(AuditAction.API_KEY_SELF_SERVICE_REQUESTED, {
       ipAddress,
@@ -92,6 +133,10 @@ export class SelfServiceApiKeyController {
   @ApiOperation({ summary: 'Request recovery of a lost self-service API key (sends a verification email)' })
   @ApiResponse({ status: 200, description: 'Accepted for processing', type: RequestSelfServiceApiKeyResponseDto })
   @ApiResponse({
+    status: 400,
+    description: 'reCAPTCHA verification failed (only when RECAPTCHA_ENABLED=true on this instance)',
+  })
+  @ApiResponse({
     status: 503,
     description:
       'Self-service API key requests are disabled on this instance, or the verification email could not be sent',
@@ -101,6 +146,7 @@ export class SelfServiceApiKeyController {
     @Req() req: Request,
   ): Promise<RequestSelfServiceApiKeyResponseDto> {
     const ipAddress = this.getClientIp(req);
+    await this.assertHuman(dto.recaptchaToken, 'self_service_forgot', req, ipAddress, dto.email);
     await this.selfServiceService.requestRecovery(dto, ipAddress);
     await this.auditService.logInfo(AuditAction.API_KEY_SELF_SERVICE_RECOVERY_REQUESTED, {
       ipAddress,

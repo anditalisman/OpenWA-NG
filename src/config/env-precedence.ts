@@ -132,6 +132,11 @@ export const BLANK_SHADOWED_ENV_KEYS: string[] = [
   'SELF_SERVICE_API_KEYS_ENABLED',
   'SELF_SERVICE_ALLOWED_EMAIL_DOMAINS',
   'SELF_SERVICE_TOKEN_TTL_MINUTES',
+  // reCAPTCHA for the self-service forms above (opt-in, off unless explicitly enabled).
+  'RECAPTCHA_ENABLED',
+  'RECAPTCHA_SITE_KEY',
+  'RECAPTCHA_SECRET_KEY',
+  'RECAPTCHA_MIN_SCORE',
   'SMTP_HOST',
   'SMTP_PORT',
   'SMTP_SECURE',

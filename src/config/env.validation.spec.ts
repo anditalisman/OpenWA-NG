@@ -440,4 +440,23 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ SMTP_PORT: '99999' })).toThrow(/SMTP_PORT/);
     expect(() => validateEnv({ SELF_SERVICE_TOKEN_TTL_MINUTES: '0' })).toThrow(/positive integer/);
   });
+
+  it('requires a secret + site key when RECAPTCHA_ENABLED=true', () => {
+    expect(() => validateEnv({ RECAPTCHA_ENABLED: 'true' })).toThrow(/RECAPTCHA_SECRET_KEY/);
+    expect(() => validateEnv({ RECAPTCHA_ENABLED: 'true', RECAPTCHA_SECRET_KEY: 'secret' })).toThrow(
+      /RECAPTCHA_SITE_KEY/,
+    );
+    expect(() =>
+      validateEnv({ RECAPTCHA_ENABLED: 'true', RECAPTCHA_SECRET_KEY: 'secret', RECAPTCHA_SITE_KEY: 'site' }),
+    ).not.toThrow();
+    // Disabled (the default): neither is required.
+    expect(() => validateEnv({})).not.toThrow();
+  });
+
+  it('rejects a RECAPTCHA_MIN_SCORE outside [0, 1]', () => {
+    expect(() => validateEnv({ RECAPTCHA_MIN_SCORE: '1.5' })).toThrow(/between 0 and 1/);
+    expect(() => validateEnv({ RECAPTCHA_MIN_SCORE: '-0.1' })).toThrow(/between 0 and 1/);
+    expect(() => validateEnv({ RECAPTCHA_MIN_SCORE: 'abc' })).toThrow(/between 0 and 1/);
+    expect(() => validateEnv({ RECAPTCHA_MIN_SCORE: '0.7' })).not.toThrow();
+  });
 });

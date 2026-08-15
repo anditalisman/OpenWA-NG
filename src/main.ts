@@ -196,6 +196,10 @@ async function bootstrap() {
   });
 
   // Enhanced Security Headers
+  // The reCAPTCHA v3 widget (self-service "request/forgot key" forms) loads its script from Google
+  // and renders an invisible challenge iframe; both need explicit CSP allowances, only granted when
+  // the feature is actually turned on so a stock deployment's CSP stays as tight as it is today.
+  const recaptchaEnabled = process.env.RECAPTCHA_ENABLED === 'true';
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -205,7 +209,11 @@ async function bootstrap() {
           // font files from fonts.gstatic.com). Now that NestJS serves the dashboard under this CSP,
           // allow those origins or the @import'd fonts are blocked and the UI falls back to system fonts.
           styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-          scriptSrc: ["'self'", (_req, res) => `'nonce-${(res as Response).locals.cspNonce as string}'`],
+          scriptSrc: [
+            "'self'",
+            (_req, res) => `'nonce-${(res as Response).locals.cspNonce as string}'`,
+            ...(recaptchaEnabled ? ['https://www.google.com/recaptcha/', 'https://www.gstatic.com/recaptcha/'] : []),
+          ],
           // `blob:` is needed for the outgoing image-attachment preview, which the dashboard renders
           // from a URL.createObjectURL(file) blob before the message is sent (Chats.tsx).
           imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
@@ -213,7 +221,10 @@ async function bootstrap() {
           // explicit media-src, <audio>/<video> fall back to default-src 'self' and are blocked.
           // Mirror imgSrc so audio/video render the same way images already do.
           mediaSrc: ["'self'", 'data:', 'blob:', 'https:'],
-          connectSrc: ["'self'"],
+          connectSrc: ["'self'", ...(recaptchaEnabled ? ['https://www.google.com/recaptcha/'] : [])],
+          // Explicit (not left to fall back to defaultSrc) so the reCAPTCHA challenge iframe is
+          // allowed only when the feature is on — everyone else keeps today's implicit 'self'.
+          frameSrc: ["'self'", ...(recaptchaEnabled ? ['https://www.google.com/recaptcha/'] : [])],
           fontSrc: ["'self'", 'https://fonts.gstatic.com'],
           objectSrc: ["'none'"],
           // Auto-upgrade HTTP→HTTPS in production, unless CSP_UPGRADE_INSECURE_REQUESTS opts out for an

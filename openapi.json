@@ -17,6 +17,11 @@
                 "api_key_revoked",
                 "api_key_deleted",
                 "api_key_auth_failed",
+                "api_key_self_service_requested",
+                "api_key_self_service_issued",
+                "api_key_self_service_recovery_requested",
+                "api_key_self_service_recovered",
+                "api_key_self_service_recaptcha_failed",
                 "rate_limit_exceeded",
                 "queue_board_mutated",
                 "session_created",
@@ -327,6 +332,188 @@
           }
         },
         "summary": "Validate an API key",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/api-keys/self-service/recaptcha-config": {
+      "get": {
+        "operationId": "SelfServiceApiKeyController_recaptchaConfig",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "reCAPTCHA config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecaptchaConfigResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Whether the self-service forms require reCAPTCHA, and the site key to render it with",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/api-keys/self-service/request": {
+      "post": {
+        "operationId": "SelfServiceApiKeyController_request",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestSelfServiceApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestSelfServiceApiKeyResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "reCAPTCHA verification failed (only when RECAPTCHA_ENABLED=true on this instance)"
+          },
+          "503": {
+            "description": "Self-service API key requests are disabled on this instance, or the verification email could not be sent"
+          }
+        },
+        "summary": "Request a self-service API key (sends a verification email)",
+        "tags": [
+          "auth"
+        ],
+        "security": []
+      }
+    },
+    "/api/auth/api-keys/self-service/verify": {
+      "post": {
+        "operationId": "SelfServiceApiKeyController_verify",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifySelfServiceApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The issued API key (shown once)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifySelfServiceApiKeyResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown verification token"
+          },
+          "410": {
+            "description": "Token already used or expired"
+          },
+          "503": {
+            "description": "Self-service API key requests are disabled on this instance"
+          }
+        },
+        "summary": "Verify a self-service request and issue the API key (single use)",
+        "tags": [
+          "auth"
+        ],
+        "security": []
+      }
+    },
+    "/api/auth/api-keys/self-service/forgot": {
+      "post": {
+        "operationId": "SelfServiceApiKeyController_forgot",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestSelfServiceApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Accepted for processing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestSelfServiceApiKeyResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "reCAPTCHA verification failed (only when RECAPTCHA_ENABLED=true on this instance)"
+          },
+          "503": {
+            "description": "Self-service API key requests are disabled on this instance, or the verification email could not be sent"
+          }
+        },
+        "summary": "Request recovery of a lost self-service API key (sends a verification email)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/api-keys/self-service/forgot/verify": {
+      "post": {
+        "operationId": "SelfServiceApiKeyController_forgotVerify",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifySelfServiceApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The replacement API key (shown once)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyForgotApiKeyResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown verification token"
+          },
+          "410": {
+            "description": "Token already used or expired"
+          },
+          "503": {
+            "description": "Self-service API key requests are disabled on this instance"
+          }
+        },
+        "summary": "Verify a recovery request: revoke the old key(s) for this email and issue a replacement (single use)",
         "tags": [
           "auth"
         ]
@@ -907,6 +1094,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "A participant does not name an individual. Pass a phone number, `<phone>@c.us` or `<lid>@lid`; a group id or free text is rejected."
           },
           "403": {
             "description": "WhatsApp refused the operation. The request was well formed — the refusal happened WhatsApp-side, most often because the account lacks the admin rights the operation requires."
@@ -4793,6 +4983,9 @@
               }
             }
           },
+          "400": {
+            "description": "A participant does not name an individual. Pass a phone number, `<phone>@c.us` or `<lid>@lid`; a group id or free text is rejected."
+          },
           "403": {
             "description": "WhatsApp refused the operation. The request was well formed — the refusal happened WhatsApp-side, most often because the account lacks the admin rights the operation requires."
           },
@@ -4850,6 +5043,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "A participant does not name an individual. Pass a phone number, `<phone>@c.us` or `<lid>@lid`; a group id or free text is rejected."
           },
           "403": {
             "description": "WhatsApp refused the operation. The request was well formed — the refusal happened WhatsApp-side, most often because the account lacks the admin rights the operation requires."
@@ -4911,6 +5107,9 @@
               }
             }
           },
+          "400": {
+            "description": "A participant does not name an individual. Pass a phone number, `<phone>@c.us` or `<lid>@lid`; a group id or free text is rejected."
+          },
           "403": {
             "description": "WhatsApp refused the operation. The request was well formed — the refusal happened WhatsApp-side, most often because the account lacks the admin rights the operation requires."
           },
@@ -4970,6 +5169,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "A participant does not name an individual. Pass a phone number, `<phone>@c.us` or `<lid>@lid`; a group id or free text is rejected."
           },
           "403": {
             "description": "WhatsApp refused the operation. The request was well formed — the refusal happened WhatsApp-side, most often because the account lacks the admin rights the operation requires."
@@ -9295,6 +9497,124 @@
             "type": "string"
           }
         }
+      },
+      "RecaptchaConfigResponseDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the self-service forms require a reCAPTCHA token"
+          },
+          "siteKey": {
+            "type": "string",
+            "nullable": true,
+            "description": "The public site key to render the widget with, or null while disabled"
+          }
+        },
+        "required": [
+          "enabled",
+          "siteKey"
+        ]
+      },
+      "RequestSelfServiceApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Friendly name for the API key that will be issued once the email is verified",
+            "example": "Budi — Notifikasi Tagihan"
+          },
+          "email": {
+            "type": "string",
+            "description": "Work email. Must match one of the domains the operator allow-listed for self-service.",
+            "example": "budi@ptamgirimenang.com"
+          },
+          "recaptchaToken": {
+            "type": "string",
+            "description": "Google reCAPTCHA v3 token from the widget. Required (and verified server-side) only when RECAPTCHA_ENABLED=true on this instance; ignored otherwise."
+          }
+        },
+        "required": [
+          "name",
+          "email"
+        ]
+      },
+      "RequestSelfServiceApiKeyResponseDto": {
+        "type": "object",
+        "properties": {
+          "submitted": {
+            "type": "boolean",
+            "description": "Always true when the request was accepted for processing. Deliberately identical whether or not the email domain is allow-listed / already has a pending request, so the endpoint cannot be used to enumerate which domains or addresses are configured."
+          }
+        },
+        "required": [
+          "submitted"
+        ]
+      },
+      "VerifySelfServiceApiKeyDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the verification link"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "VerifySelfServiceApiKeyResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "Full API key — shown only this once"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "apiKey",
+          "role"
+        ]
+      },
+      "VerifyForgotApiKeyResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "apiKey": {
+            "type": "string",
+            "description": "Full API key — shown only this once"
+          },
+          "role": {
+            "type": "string"
+          },
+          "revokedCount": {
+            "type": "number",
+            "description": "How many previously active self-service keys for this email were revoked"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "apiKey",
+          "role",
+          "revokedCount"
+        ]
       },
       "CreateSessionDto": {
         "type": "object",

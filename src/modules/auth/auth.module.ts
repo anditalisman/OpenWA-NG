@@ -7,6 +7,7 @@ import { Session } from '../session/entities/session.entity';
 import { AuthService } from './auth.service';
 import { ApiKeyUsageTracker } from './api-key-usage-tracker.service';
 import { SelfServiceApiKeyService } from './self-service-api-key.service';
+import { RecaptchaService } from './recaptcha.service';
 import { AuthController } from './auth.controller';
 import { AuthValidateController } from './auth-validate.controller';
 import { SelfServiceApiKeyController } from './self-service-api-key.controller';
@@ -28,6 +29,7 @@ import { ProxyAwareThrottlerGuard } from '../../common/security/proxy-aware-thro
     AuthService,
     ApiKeyUsageTracker,
     SelfServiceApiKeyService,
+    RecaptchaService,
     {
       provide: APP_GUARD,
       useClass: ProxyAwareThrottlerGuard,
