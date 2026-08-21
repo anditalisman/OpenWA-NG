@@ -53,7 +53,9 @@ describe('SelfServiceApiKeyService', () => {
           apiKey: { id: 'key-1', name: 'test', role: ApiKeyRole.OPERATOR } as ApiKey,
           rawKey: 'owa_k1_rawkey',
         }),
-      revoke: jest.fn<Promise<ApiKey>, [string]>().mockImplementation(async (id: string) => ({ id }) as ApiKey),
+      revoke: jest
+        .fn<Promise<ApiKey>, [string]>()
+        .mockImplementation((id: string) => Promise.resolve({ id }) as Promise<ApiKey>),
       reassignSessionOwnership: jest.fn<Promise<number>, [string, string]>().mockResolvedValue(0),
     };
     mailService = { send: jest.fn<Promise<void>, [SendMailOptions]>().mockResolvedValue(undefined) };

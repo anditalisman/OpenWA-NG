@@ -180,7 +180,9 @@ chat `id`) is reduced to one small **neutral dialect**:
 
 Never `@s.whatsapp.net`, never a `:device` suffix. **Resolution rule:** prefer `@c.us` (resolve a lid
 to its phone when the mapping is known), and fall back to `@lid` only when it can't be resolved - an
-unresolved lid is never faked into a phone number.
+unresolved lid is never faked into a phone number. WhatsApp's Meta-hosted dialects fold in here
+too: `<n>@hosted` is the same account as `<n>@c.us` and normalizes to it, and `<lid>@hosted.lid`
+normalizes like any other lid. Baileys makes the same fold itself on every inbound message.
 
 The shared implementation lives in `src/engine/identity/wa-id.ts` (`parseWaId` / `toNeutralJid`); the
 contract is documented on the `IWhatsAppEngine` interface.
@@ -388,8 +390,8 @@ flowchart TB
 Trimmed to the load-bearing directories — `src/modules/` holds 31 feature modules. Only `*.module.ts`
 is common to all of them; the rest of the shape varies. Most pair a `*.controller.ts` with a
 `*.service.ts`, but `events/` is a WebSocket gateway, `mcp/` an MCP server and `queue/` pure BullMQ
-wiring (none of the three has either); `docker/` and `status-store/` are service-only; `health/`,
-`infra/` and `settings/` are controller-only; and 8 modules own an `entities/` directory:
+wiring (none of the three has either); `docker/` and `status-store/` are service-only; `health/` and
+`settings/` are controller-only (`infra/` gained `infra-data.service.ts`); and 9 modules own an `entities/` directory:
 
 ```
 src/
@@ -411,13 +413,11 @@ src/
 │   ├── hooks/
 │   └── agent-tools/
 │
-├── plugins/
-│   └── engines/                # Built-in whatsapp-web.js + baileys engine plugins
-│
 ├── engine/                     # WhatsApp engine abstraction
 │   ├── engine.module.ts
 │   ├── engine.factory.ts
 │   ├── adapters/               # whatsapp-web-js.adapter.ts, baileys.adapter.ts, mappers, stores
+│   ├── builtin/                # Built-in engine plugins: baileys/, whatsapp-web-js/
 │   ├── identity/               # Neutral WhatsApp id helpers + lid-mapping store
 │   ├── interfaces/             # whatsapp-engine.interface.ts
 │   └── types/

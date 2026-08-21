@@ -1073,6 +1073,31 @@ func TestCallReceivedPayloadDecodes(t *testing.T) {
 	}
 }
 
+// SendAudioRequest is flattened rather than embedding SendMediaRequest, because ptt is accepted on
+// this route alone. The flattening is what dropped mentions here while every other send carried it,
+// so this asserts the wire body rather than the call.
+func TestSendAudioForwardsMentions(t *testing.T) {
+	rt := &recordTransport{status: 200, body: `{"messageId":"m1","timestamp":1}`}
+	c := newTestClient(t, rt)
+
+	if _, err := c.Messages.SendAudio(context.Background(), "s1", SendAudioRequest{
+		ChatID:   "g@g.us",
+		URL:      "http://u",
+		Mentions: []string{"628123@c.us"},
+	}); err != nil {
+		t.Fatalf("SendAudio: %v", err)
+	}
+
+	var sent map[string]any
+	if err := json.Unmarshal(rt.lastRaw, &sent); err != nil {
+		t.Fatalf("body not JSON: %v", err)
+	}
+	mentions, ok := sent["mentions"].([]any)
+	if !ok || len(mentions) != 1 || mentions[0] != "628123@c.us" {
+		t.Fatalf("sent body = %v", sent)
+	}
+}
+
 func TestSendTextForwardsMentions(t *testing.T) {
 	rt := &recordTransport{status: 200, body: `{"messageId":"m1","timestamp":1}`}
 	c := newTestClient(t, rt)
@@ -1377,5 +1402,58 @@ func TestUpdateSessionConfigEmitsThreeStates(t *testing.T) {
 		if string(b) != c.want {
 			t.Fatalf("%s: got %s, want %s", c.name, b, c.want)
 		}
+	}
+}
+
+// The request enums are named types, so a Go value can no longer be an arbitrary string. What the
+// compiler cannot check is the value each constant CARRIES: these fields travel as their
+// underlying string or number, and a typo would be refused by the server, not by the build.
+func TestRequestEnumWireValues(t *testing.T) {
+	wireStrings := map[string]string{
+		string(CallLinkAudio):             "audio",
+		string(CallLinkVideo):             "video",
+		string(ProxyHTTP):                 "http",
+		string(ProxyHTTPS):                "https",
+		string(ProxySOCKS4):               "socks4",
+		string(ProxySOCKS5):               "socks5",
+		string(MembershipInviteLink):      "invite_link",
+		string(MembershipLinkedGroupJoin): "linked_group_join",
+		string(MembershipNonAdminAdd):     "non_admin_add",
+		string(ChatStateTyping):           "typing",
+		string(ChatStateRecording):        "recording",
+		string(ChatStatePaused):           "paused",
+	}
+	for got, want := range wireStrings {
+		if got != want {
+			t.Errorf("wire value = %q, want %q", got, want)
+		}
+	}
+	wireNumbers := map[int]int{
+		int(PinOneDay):         86400,
+		int(PinSevenDays):      604800,
+		int(PinThirtyDays):     2592000,
+		int(StatusFontDefault): 0,
+		int(StatusFontBold):    6,
+		int(StatusFontBryndan): 10,
+	}
+	for got, want := range wireNumbers {
+		if got != want {
+			t.Errorf("wire value = %d, want %d", got, want)
+		}
+	}
+	// The named types must still marshal as bare JSON scalars, not as objects or quoted numbers.
+	body, err := json.Marshal(SendChatStateRequest{ChatID: "x@c.us", State: ChatStateTyping})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(body), `"state":"typing"`) {
+		t.Errorf("state did not marshal as a bare string: %s", body)
+	}
+	pin, err := json.Marshal(PinMessageRequest{ChatID: "x@c.us", MessageID: "m", DurationSeconds: PinOneDay})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(pin), `"durationSeconds":86400`) {
+		t.Errorf("durationSeconds did not marshal as a bare number: %s", pin)
 	}
 }

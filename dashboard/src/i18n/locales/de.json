@@ -143,7 +143,8 @@
       "orLabel": "oder",
       "post": "Posten",
       "posted": "Status gepostet",
-      "postFailed": "Status konnte nicht gepostet werden"
+      "postFailed": "Status konnte nicht gepostet werden",
+      "imageFile": "Statusbild"
     },
     "channels": {
       "notSupported": "Kanäle werden von der Baileys-Engine nicht unterstützt.",
@@ -158,9 +159,17 @@
       "markRead": "Chat konnte nicht als gelesen markiert werden",
       "send": "Nachricht konnte nicht gesendet werden",
       "react": "Reaktion auf die Nachricht fehlgeschlagen",
-      "delete": "Nachricht konnte nicht gelöscht werden"
+      "delete": "Nachricht konnte nicht gelöscht werden",
+      "fileTooLarge": "Die Datei ist zu groß (max. 18 MB)"
     },
-    "loadMessagesError": "Nachrichten konnten nicht geladen werden. Prüfe die Serverprotokolle."
+    "loadMessagesError": "Nachrichten konnten nicht geladen werden. Prüfe die Serverprotokolle.",
+    "messageStatus": {
+      "pending": "Ausstehend",
+      "sent": "Gesendet",
+      "delivered": "Zugestellt",
+      "read": "Gelesen",
+      "failed": "Fehlgeschlagen"
+    }
   },
   "errorBoundary": {
     "title": "Etwas ist schiefgelaufen",
@@ -458,7 +467,10 @@
         "isNot": "ist nicht",
         "contains": "enthält",
         "equals": "entspricht"
-      }
+      },
+      "fieldLabel": "Filterfeld",
+      "operatorLabel": "Filteroperator",
+      "valueLabel": "Filterwert"
     },
     "columns": {
       "url": "URL",
@@ -539,7 +551,8 @@
       "deleted": "Vorlage wurde erfolgreich gelöscht",
       "deleteFailed": "Vorlage konnte nicht gelöscht werden: {{message}}",
       "copied": "Vorlagenname wurde kopiert"
-    }
+    },
+    "sessionSelect": "Sitzung"
   },
   "apiKeys": {
     "title": "API-Schlüssel",
@@ -621,7 +634,10 @@
     },
     "empty": {
       "title": "Keine Protokolle gefunden",
-      "description": "Audit-Protokolle werden hier angezeigt, sobald Aktionen ausgeführt werden"
+      "description": "Audit-Protokolle werden hier angezeigt, sobald Aktionen ausgeführt werden",
+      "filteredTitle": "Keine Treffer auf dieser Seite",
+      "filteredDescription": "Die Suche filtert nur die aktuelle Seite. Leere sie, blättere weiter oder grenze serverseitig über den Severity-Filter ein.",
+      "filteredServerDescription": "Keine Protokolle passen auf diese Filter. Passe den Severity-Filter an, um die Suche zu erweitern."
     }
   },
   "messageTester": {
@@ -882,6 +898,7 @@
     "installModal": {
       "title": "Plugin installieren",
       "hint": "Lade ein als ZIP-Datei verpacktes Plugin mit einer manifest.json hoch. Nach der Aktivierung wird es in einer Sandbox ausgeführt.",
+      "trustWarning": "Plugins laufen mit den vollen Prozessrechten des Gateways — die Sandbox fängt Abstürze ab, keinen Schadcode. Installiere nur Plugins, denen du vertraust.",
       "choose": "ZIP-Datei auswählen…",
       "tooLarge": "Die Datei überschreitet das Limit von 5 MB.",
       "catalogHint": "Installieren Sie direkt aus dem OpenWA-Plugin-Katalog. Die .zip-Datei wird serverseitig durch den SSRF-Schutz abgerufen, dann validiert und in einer Sandbox ausgeführt.",

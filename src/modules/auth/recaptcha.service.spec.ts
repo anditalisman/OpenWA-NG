@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { RecaptchaService } from './recaptcha.service';
 
-type FetchMock = jest.Mock<Promise<{ json: () => Promise<unknown> }>, [string, RequestInit]>;
+type FetchMock = jest.Mock<Promise<{ json: () => Promise<unknown> }>, [RequestInfo | URL, RequestInit?]>;
 
 describe('RecaptchaService', () => {
   const ORIGINAL_ENV = process.env;
@@ -10,7 +10,7 @@ describe('RecaptchaService', () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
     fetchMock = jest.fn() as FetchMock;
-    (global as unknown as { fetch: typeof fetch }).fetch = fetchMock;
+    (global as unknown as { fetch: FetchMock }).fetch = fetchMock;
   });
 
   afterEach(() => {
@@ -68,7 +68,7 @@ describe('RecaptchaService', () => {
         'https://www.google.com/recaptcha/api/siteverify',
         expect.objectContaining({ method: 'POST' }),
       );
-      const body = fetchMock.mock.calls[0][1].body as URLSearchParams;
+      const body = fetchMock.mock.calls[0][1]!.body as URLSearchParams;
       expect(body.get('secret')).toBe('secret');
       expect(body.get('response')).toBe('tok');
       expect(body.get('remoteip')).toBe('1.2.3.4');

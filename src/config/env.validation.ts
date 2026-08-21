@@ -70,6 +70,25 @@ export function validateEnv(config: EnvConfig): EnvConfig {
   };
   checkEnum('ENGINE_TYPE', ['whatsapp-web.js', 'baileys']);
   checkEnum('STORAGE_TYPE', ['local', 's3']);
+  // Every production hardening in the repo gates on the exact string 'production', so an
+  // unrecognised value silently selects the permissive branch of each one — CORS, Swagger, DTO
+  // error detail, the default-secret guard and the ALLOW_DEV_API_KEY rejection that stops the public
+  // `dev-admin-key` being seeded as ADMIN.
+  //
+  // Unset stays legal because it is the standard Node default for a plain `node dist/main` outside
+  // any packaged runtime — refusing it would break local runs. The packaged runtimes all set it (the
+  // runtime image carries `ENV NODE_ENV=production`, the chart sets it, and both compose files set it
+  // via `${NODE_ENV:-production}` and a hardcoded `development`); only a hand-rolled deployment that
+  // strips it still takes the permissive branch of every hardening listed above.
+  //
+  // Checked RAW rather than through `str()`: the readers compare `process.env.NODE_ENV` verbatim, so
+  // a padded ' production ' that only matches after trimming would validate clean here and still take
+  // the permissive branch at runtime — blessing the very downgrade this check exists to stop.
+  const nodeEnvAllowed = ['production', 'development', 'test'];
+  const rawNodeEnv = config.NODE_ENV;
+  if (typeof rawNodeEnv === 'string' && rawNodeEnv !== '' && !nodeEnvAllowed.includes(rawNodeEnv)) {
+    errors.push(`NODE_ENV must be one of ${nodeEnvAllowed.map(v => `"${v}"`).join(', ')} (got "${rawNodeEnv}")`);
+  }
 
   if (dbType === 'postgres') {
     for (const key of ['DATABASE_HOST', 'DATABASE_USERNAME', 'DATABASE_PASSWORD']) {
@@ -174,6 +193,7 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     'AUTOMATION_MAX_PER_SESSION', // 0 = unlimited
     'WEBHOOK_MEDIA_INLINE_MAX_BYTES', // 0 = never inline media
     'EXPORT_INLINE_MEDIA_BUDGET_BYTES', // 0 = a data export carries no inline media at all
+    'MESSAGE_LIST_INLINE_MEDIA_BUDGET_BYTES', // 0 = a message list carries no inline media at all
   ]) {
     checkNonNegativeInt(key);
   }
@@ -201,6 +221,28 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     checkInt(key);
   }
 
+  // BAILEYS_WA_VERSION: optional version pin for the Baileys engine (e.g. 2.3000.1045340097 or 2,3000,1045340097)
+  for (const key of ['BAILEYS_WA_VERSION']) {
+    const raw = str(key);
+    if (raw !== undefined) {
+      const match = raw.match(/^(\d+)[.,](\d+)[.,](\d+)$/);
+      if (!match) {
+        errors.push(
+          `${key} must be a valid WhatsApp Web version (e.g. "2.3000.1045340097"; got ${JSON.stringify(raw)})`,
+        );
+      } else {
+        const major = parseInt(match[1], 10);
+        const minor = parseInt(match[2], 10);
+        const patch = parseInt(match[3], 10);
+        if (major !== 2 || minor < 2000 || patch < 0) {
+          errors.push(
+            `${key} must be a valid WhatsApp Web version (e.g. "2.3000.1045340097"; got ${JSON.stringify(raw)})`,
+          );
+        }
+      }
+    }
+  }
+
   // Some knobs are nonsensical at 0 and contradict the "non-negative" intent: a rate-limit LIMIT of 0
   // disables that tier's throttling (a self-DoS), and a webhook timeout of 0 aborts every delivery
   // immediately. Require a positive integer for these.
@@ -224,6 +266,7 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     'WS_MAX_SOCKETS_PER_KEY',
     'WEBHOOK_TIMEOUT',
     'INGRESS_INSTANCE_LIMIT',
+    'INGRESS_IP_LIMIT',
     'REQUEST_TIMEOUT_MS',
     'HEADERS_TIMEOUT_MS',
     'KEEPALIVE_TIMEOUT_MS',

@@ -13,6 +13,11 @@ export interface BaileysChannelsHost {
   ensureReady(): void;
   /** Post-ensureReady socket handle — call host.ensureReady() first. */
   getSocket(): WASocket;
+  /**
+   * Neutral → engine jid dialect. Channel ids need no mapping (`@newsletter` in both), but the
+   * admin writes take a USER jid, which does.
+   */
+  toEngineJid(jid: string): string;
 }
 
 /**
@@ -73,7 +78,9 @@ export class BaileysChannels {
     if (!meta) {
       throw new ChannelNotFoundError(inviteCode);
     }
-    await this.bounded(this.sock().newsletterFollow(meta.id), 'the channel subscribe');
+    await mapServerRefusal('Subscribing to the channel', () =>
+      this.bounded(this.sock().newsletterFollow(meta.id), 'the channel subscribe'),
+    );
     return this.toChannel(meta);
   }
 
@@ -90,6 +97,44 @@ export class BaileysChannels {
       wmexRefusalCode,
     );
     return this.toChannel(meta);
+  }
+
+  /**
+   * Demote a channel admin back to a plain subscriber. `userId` arrives in the NEUTRAL dialect and
+   * is mapped here, the way the contact and messaging delegates map theirs.
+   *
+   * There is no promote counterpart to pair this with, and that is upstream rather than ours:
+   * Baileys exposes `newsletterDemote`, `newsletterChangeOwner` and `newsletterAdminCount` but no
+   * promote, and whatsapp-web.js has no `promoteChannelAdmin` at all. An admin is promoted from the
+   * WhatsApp app and can then be demoted through this API.
+   */
+  async demoteChannelAdmin(channelId: string, userId: string): Promise<void> {
+    this.host.ensureReady();
+    const userJid = this.host.toEngineJid(userId);
+    await mapServerRefusal(
+      'Demoting the channel admin',
+      () => this.bounded(this.sock().newsletterDemote(channelId, userJid), 'the channel admin demotion'),
+      wmexRefusalCode,
+    );
+  }
+
+  /**
+   * Hand the channel to a new owner. IRREVERSIBLE: the account stops being the owner and cannot
+   * take it back through this API.
+   *
+   * Bounded, unlike `createChannel` above. That one stays unbounded because a retried create leaves
+   * a duplicate channel behind; here a retry after a transfer that actually landed is refused, since
+   * the account no longer owns the channel. So the deadline costs an ambiguous 503 ("may or may not
+   * have applied") and buys a request that ends.
+   */
+  async transferChannelOwnership(channelId: string, newOwnerId: string): Promise<void> {
+    this.host.ensureReady();
+    const newOwnerJid = this.host.toEngineJid(newOwnerId);
+    await mapServerRefusal(
+      'Transferring the channel ownership',
+      () => this.bounded(this.sock().newsletterChangeOwner(channelId, newOwnerJid), 'the channel ownership transfer'),
+      wmexRefusalCode,
+    );
   }
 
   async deleteChannel(channelId: string): Promise<void> {
@@ -116,7 +161,11 @@ export class BaileysChannels {
 
   async unsubscribeFromChannel(channelId: string): Promise<void> {
     this.host.ensureReady();
-    await this.bounded(this.sock().newsletterUnfollow(channelId), 'the channel unsubscribe');
+    // The other channel writes map WhatsApp's refusal; this one did not, so unfollowing a channel
+    // the account no longer follows answered 500 where whatsapp-web.js answers the documented 403.
+    await mapServerRefusal('Unsubscribing from the channel', () =>
+      this.bounded(this.sock().newsletterUnfollow(channelId), 'the channel unsubscribe'),
+    );
   }
 
   /** Map a Baileys NewsletterMetadata to the neutral Channel shape (optionals only when present). */

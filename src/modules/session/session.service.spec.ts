@@ -3,23 +3,20 @@ import { SessionRestrictionStore } from './session-restriction-store.service';
 import { PresenceStore } from './presence-store.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken, getDataSourceToken } from '@nestjs/typeorm';
-import { Repository, DataSource, In } from 'typeorm';
+import { Repository, DataSource, In, QueryFailedError } from 'typeorm';
 import {
   NotFoundException,
   ConflictException,
   BadRequestException,
   BadGatewayException,
+  GatewayTimeoutException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { EngineTransportError } from '../../common/errors/engine-transport.error';
 import { ConfigService } from '@nestjs/config';
-import {
-  SessionService,
-  ACK_RECONCILE_DELAY_MS,
-  SESSION_WATCHDOG_INTERVAL_MS,
-  SESSION_WATCHDOG_MAX_FAILURES,
-  SESSION_WATCHDOG_PROBE_TIMEOUT_MS,
-} from './session.service';
+import { SessionService, AUTOSTART_THROTTLE_MS } from './session.service';
+import { ACK_RECONCILE_DELAY_MS } from './message-projector.service';
 import { SessionEngineLifecycle } from './session-engine-lifecycle.service';
 import { Session, SessionStatus } from './entities/session.entity';
 import { Message, MessageDirection, MessageStatus } from '../message/entities/message.entity';
@@ -31,7 +28,12 @@ import { EngineFactory } from '../../engine/engine.factory';
 import { EngineRegistry } from '../../engine/engine-registry.service';
 import type { KeyedMutationQueue } from '../../common/utils/keyed-mutation-queue';
 import { SessionLidResolver } from './session-lid-resolver.service';
-import { SessionLivenessWatchdog } from './session-liveness-watchdog.service';
+import {
+  SessionLivenessWatchdog,
+  SESSION_WATCHDOG_INTERVAL_MS,
+  SESSION_WATCHDOG_MAX_FAILURES,
+  SESSION_WATCHDOG_PROBE_TIMEOUT_MS,
+} from './session-liveness-watchdog.service';
 import { MessageProjector } from './message-projector.service';
 import { LidMappingStoreService } from '../../engine/identity/lid-mapping-store.service';
 import { EventsGateway } from '../events/events.gateway';
@@ -72,6 +74,7 @@ function createMockSession(overrides: Partial<Session> = {}): Session {
     claimedAt: null,
     leaseExpiresAt: null,
     nodeUrl: null,
+    createdByApiKeyId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -330,16 +333,50 @@ describe('SessionService', () => {
       expect(engineFactory.purgeSessionData).toHaveBeenCalledWith('test-session');
     });
 
-    it('stop() completes when engine.disconnect() rejects — map reconciled, status updated', async () => {
+    it('stop() escalates to forceDestroy when engine.disconnect() rejects — stop completes with a warning', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
-      const engine = { disconnect: jest.fn().mockRejectedValue(new Error('stuck socket')) };
+      const engine = {
+        disconnect: jest.fn().mockRejectedValue(new Error('stuck socket')),
+        forceDestroy: jest.fn().mockResolvedValue(undefined),
+      };
       enginesOf().set('sess-uuid-1', engine);
+      const warn = jest.spyOn((lifecycle as unknown as { logger: { warn: (...a: unknown[]) => void } }).logger, 'warn');
 
       await expect(service.stop('sess-uuid-1')).resolves.toBeDefined();
 
       expect(engine.disconnect).toHaveBeenCalledTimes(1);
+      expect(engine.forceDestroy).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('escalating to force-destroy'),
+        expect.objectContaining({ sessionId: 'sess-uuid-1' }),
+      );
       expect(enginesOf().has('sess-uuid-1')).toBe(false);
+      expect(repository.update).toHaveBeenCalledWith('sess-uuid-1', { status: SessionStatus.DISCONNECTED });
+      warn.mockRestore();
+    });
+
+    it('stop() surfaces a retryable 502 when the graceful disconnect AND the force-destroy both fail', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      const engine = {
+        disconnect: jest.fn().mockRejectedValue(new Error('stuck socket')),
+        forceDestroy: jest.fn().mockRejectedValue(new Error('SIGKILL refused')),
+      };
+      enginesOf().set('sess-uuid-1', engine);
+
+      const thrown = await service.stop('sess-uuid-1').catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(BadGatewayException);
+      const response = (thrown as BadGatewayException).getResponse() as { code?: string; message?: string };
+      expect(response.code).toBe('SESSION_STOP_INCOMPLETE');
+      expect(engine.disconnect).toHaveBeenCalledTimes(1);
+      expect(engine.forceDestroy).toHaveBeenCalledTimes(1);
+      // The engine leaves the map regardless — it must not hold a concurrency slot — but the stop is
+      // reported as incomplete rather than claimed clean for a process that may still be running.
+      expect(enginesOf().has('sess-uuid-1')).toBe(false);
+      // Local state is still settled, mirroring logout()'s incomplete path.
+      expect(repository.update).toHaveBeenCalledWith('sess-uuid-1', { status: SessionStatus.DISCONNECTED });
     });
 
     it('delete() still surfaces a real DB-removal failure (engine teardown is best-effort, DB is not)', async () => {
@@ -867,6 +904,89 @@ describe('SessionService', () => {
       }
       expect(caught).toBeInstanceOf(HttpException);
       expect((caught as HttpException).getStatus()).toBe(HttpStatus.GATEWAY_TIMEOUT);
+    });
+
+    it('retries a transient launch failure once and keeps the claim held', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (engineFactory.create as jest.Mock).mockClear().mockReturnValue(mockEngine);
+      // First launch dies on a dead page (EngineTransportError - infrastructure, not the session);
+      // the single retry goes through, so the session survives what used to need a process restart.
+      mockEngine.initialize
+        .mockRejectedValueOnce(new EngineTransportError('Protocol error: Target closed'))
+        .mockResolvedValueOnce(undefined);
+
+      await expect(service.start('sess-uuid-1')).resolves.toBeDefined();
+
+      expect(mockEngine.initialize).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * The shape better-sqlite3 actually throws under write contention: the token lives on `code`,
+     * and the message reads `database is locked`. TypeORM copies the driver's own properties onto
+     * QueryFailedError and rewrites the message to `SqliteError: database is locked`, so the token
+     * appears in neither message. A classifier matching `SQLITE_BUSY` as text cannot fire on either.
+     */
+    const sqliteBusy = (): QueryFailedError => {
+      const driverError = Object.assign(new Error('database is locked'), {
+        name: 'SqliteError',
+        code: 'SQLITE_BUSY',
+      });
+      return new QueryFailedError('UPDATE sessions SET status = ?', [], driverError);
+    };
+
+    it('retries a locked-database launch failure, which no message text reveals', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (engineFactory.create as jest.Mock).mockClear().mockReturnValue(mockEngine);
+      const busy = sqliteBusy();
+      // The premise of reading `code`: the token is absent from every message on this error.
+      expect(busy.message).not.toContain('SQLITE_BUSY');
+      expect(busy.driverError.message).not.toContain('SQLITE_BUSY');
+      expect((busy as unknown as { code: string }).code).toBe('SQLITE_BUSY');
+
+      mockEngine.initialize.mockRejectedValueOnce(busy).mockResolvedValueOnce(undefined);
+
+      await expect(service.start('sess-uuid-1')).resolves.toBeDefined();
+      expect(mockEngine.initialize).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT retry a malformed query, which carries a different driver code', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (engineFactory.create as jest.Mock).mockClear().mockReturnValue(mockEngine);
+      const driverError = Object.assign(new Error('no such column: nope'), {
+        name: 'SqliteError',
+        code: 'SQLITE_ERROR',
+      });
+      mockEngine.initialize.mockRejectedValue(new QueryFailedError('SELECT nope', [], driverError));
+
+      await expect(service.start('sess-uuid-1')).rejects.toBeInstanceOf(QueryFailedError);
+      expect(mockEngine.initialize).toHaveBeenCalledTimes(1);
+    });
+
+    it('gives up after the single retry and surfaces the failure (no unbounded loop)', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (engineFactory.create as jest.Mock).mockClear().mockReturnValue(mockEngine);
+      mockEngine.initialize.mockRejectedValue(new EngineTransportError('Protocol error: Target closed'));
+
+      await expect(service.start('sess-uuid-1')).rejects.toBeInstanceOf(EngineTransportError);
+      expect(mockEngine.initialize).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT retry a 504 auth timeout: the account/proxy answer propagates immediately', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      (engineFactory.create as jest.Mock).mockClear().mockReturnValue(mockEngine);
+      mockEngine.initialize.mockRejectedValue(new GatewayTimeoutException('auth timeout'));
+
+      // The lifecycle re-wraps the timeout into its own 504 HttpException; the pinned behavior is
+      // the status and that the launch was NOT retried.
+      const caught = await service.start('sess-uuid-1').catch((e: unknown) => e);
+      expect(caught).toBeInstanceOf(HttpException);
+      expect((caught as HttpException).getStatus()).toBe(HttpStatus.GATEWAY_TIMEOUT);
+      expect(mockEngine.initialize).toHaveBeenCalledTimes(1);
     });
 
     it('allows a fresh start after the previous one completed (reservation is cleared)', async () => {
@@ -3899,7 +4019,7 @@ describe('SessionService', () => {
       // The emit lives AFTER the dedup gate. A re-fire that hits the UNIQUE(sessionId, waMessageId)
       // constraint must not emit message:persisted — no row was durably stored on this attempt.
       const callbacks = await startAndCaptureCallbacks();
-      // Emulate the SQLite UNIQUE-violation phrasing that `isUniqueConstraintError` matches via regex.
+      // Emulate the SQLite UNIQUE-violation phrasing that `isUniqueViolation` matches via regex.
       (messageRepository.insert as jest.Mock).mockRejectedValueOnce(
         new Error('UNIQUE constraint failed: messages.sessionId, messages.waMessageId'),
       );
@@ -5059,8 +5179,23 @@ describe('SessionService', () => {
 
       const result = await service.sendSeen('sess-uuid-1', '123@c.us');
 
-      expect(mockEngine.sendSeen).toHaveBeenCalledWith('123@c.us');
+      // Second argument is the optional messageIds, absent here — the engine falls back to the
+      // newest message it still holds.
+      expect(mockEngine.sendSeen).toHaveBeenCalledWith('123@c.us', undefined);
       expect(result).toBe(true);
+    });
+
+    it('should forward caller-supplied message IDs to the engine', async () => {
+      const session = createMockSession();
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await service.start('sess-uuid-1');
+      mockEngine.sendSeen.mockResolvedValue(true);
+
+      await service.sendSeen('sess-uuid-1', '123@c.us', ['M1', 'M2']);
+
+      expect(mockEngine.sendSeen).toHaveBeenCalledWith('123@c.us', ['M1', 'M2']);
     });
 
     it('should throw BadRequestException when session is not started', async () => {
@@ -5759,15 +5894,20 @@ describe('SessionService', () => {
         { id: 'a', name: 'A' },
         { id: 'b', name: 'B' },
       ]);
-      jest.spyOn(service as unknown as { delay: () => Promise<void> }, 'delay').mockResolvedValue(undefined);
       const startSpy = jest.spyOn(service, 'start').mockResolvedValue(undefined as never);
 
-      service.onApplicationBootstrap();
-      await autoStartRun();
+      jest.useFakeTimers();
+      try {
+        service.onApplicationBootstrap();
+        await jest.advanceTimersByTimeAsync(AUTOSTART_THROTTLE_MS); // the inter-launch throttle
+        await autoStartRun();
 
-      expect(startSpy).toHaveBeenCalledTimes(2);
-      expect(startSpy).toHaveBeenCalledWith('a');
-      expect(startSpy).toHaveBeenCalledWith('b');
+        expect(startSpy).toHaveBeenCalledTimes(2);
+        expect(startSpy).toHaveBeenCalledWith('a');
+        expect(startSpy).toHaveBeenCalledWith('b');
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('keeps starting the remaining sessions when one fails', async () => {
@@ -5776,16 +5916,21 @@ describe('SessionService', () => {
         { id: 'a', name: 'A' },
         { id: 'b', name: 'B' },
       ]);
-      jest.spyOn(service as unknown as { delay: () => Promise<void> }, 'delay').mockResolvedValue(undefined);
       const startSpy = jest
         .spyOn(service, 'start')
         .mockRejectedValueOnce(new Error('boom'))
         .mockResolvedValueOnce(undefined as never);
 
-      service.onApplicationBootstrap();
-      await autoStartRun();
+      jest.useFakeTimers();
+      try {
+        service.onApplicationBootstrap();
+        await jest.advanceTimersByTimeAsync(AUTOSTART_THROTTLE_MS); // the inter-launch throttle
+        await autoStartRun();
 
-      expect(startSpy).toHaveBeenCalledTimes(2);
+        expect(startSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     // Nest binds the HTTP listener only after every bootstrap hook settles, and a launch is a
@@ -5817,16 +5962,21 @@ describe('SessionService', () => {
         { id: 'b', name: 'B' },
         { id: 'c', name: 'C' },
       ]);
-      jest.spyOn(service as unknown as { delay: () => Promise<void> }, 'delay').mockResolvedValue(undefined);
       const startSpy = jest.spyOn(service, 'start').mockImplementation(() => {
         (service as unknown as { shuttingDown: boolean }).shuttingDown = true;
         return Promise.resolve(undefined as never);
       });
 
-      service.onApplicationBootstrap();
-      await autoStartRun();
+      jest.useFakeTimers();
+      try {
+        service.onApplicationBootstrap();
+        await jest.advanceTimersByTimeAsync(AUTOSTART_THROTTLE_MS); // the inter-launch throttle
+        await autoStartRun();
 
-      expect(startSpy).toHaveBeenCalledTimes(1);
+        expect(startSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     // The other half of detaching it: a SIGTERM during boot must not leave a browser being launched

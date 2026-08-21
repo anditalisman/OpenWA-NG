@@ -53,7 +53,8 @@ func main() {
   `client.Sessions`, `client.Messages`, `client.Contacts`, `client.Groups`,
   `client.Webhooks`, `client.Chats`, `client.Status`, `client.Labels`,
   `client.Channels`, `client.Catalog`, `client.Templates`, `client.Health`,
-  `client.Search`, `client.Auth`, `client.Profile`, `client.Calls`.
+  `client.Search`, `client.Auth`, `client.Profile`, `client.Calls`,
+  `client.Media`.
 - **Context-first** — every network method takes `ctx context.Context` as its
   first argument; the context bounds the request (and any retries).
 - **Functional options + DI** — inject dependencies instead of relying on
@@ -185,10 +186,10 @@ subdirectory rather than at the repository root:
 
 ```bash
 # Correct — `sdk/go/` prefix, matching `module github.com/rmyndharis/OpenWA/sdk/go`
-git tag sdk/go/v0.3.0 && git push origin sdk/go/v0.3.0
+git tag sdk/go/v0.5.0 && git push origin sdk/go/v0.5.0
 ```
 
-A bare `v0.3.0` tag is the _app_ version and does nothing for this module.
+A bare `v0.5.0` tag is the _app_ version and does nothing for this module.
 Without a prefixed tag, `go get` resolves a pseudo-version
 (`v0.0.0-<date>-<commit>`) — usable, but callers cannot pin a release.
 

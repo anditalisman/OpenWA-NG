@@ -36,9 +36,9 @@ describe('AddSelfServiceRecovery migration', () => {
     )) as Array<{ name: string }>;
     expect(indexes.some(i => i.name === 'IDX_api_keys_selfServiceEmail')).toBe(true);
 
-    const requestColumns = (await qr.query(
-      `PRAGMA table_info("api_key_self_service_requests")`,
-    )) as Array<{ name: string }>;
+    const requestColumns = (await qr.query(`PRAGMA table_info("api_key_self_service_requests")`)) as Array<{
+      name: string;
+    }>;
     const purposeCol = requestColumns.find(c => c.name === 'purpose');
     expect(purposeCol).toBeDefined();
 
@@ -46,15 +46,17 @@ describe('AddSelfServiceRecovery migration', () => {
     await qr.query(
       "INSERT INTO api_key_self_service_requests (id, name, email, tokenHash, expiresAt) VALUES ('1', 'n', 'a@b.com', 'hash', '2099-01-01')",
     );
-    const rows = (await qr.query(
-      "SELECT purpose FROM api_key_self_service_requests WHERE id = '1'",
-    )) as Array<{ purpose: string }>;
+    const rows = (await qr.query("SELECT purpose FROM api_key_self_service_requests WHERE id = '1'")) as Array<{
+      purpose: string;
+    }>;
     expect(rows[0].purpose).toBe('issue');
 
-    await qr.query("INSERT INTO api_keys (id, name, keyHash, keyPrefix, selfServiceEmail) VALUES ('k1', 'n', 'h', 'p', 'a@b.com')");
-    const keyRows = (await qr.query(
-      "SELECT selfServiceEmail FROM api_keys WHERE id = 'k1'",
-    )) as Array<{ selfServiceEmail: string }>;
+    await qr.query(
+      "INSERT INTO api_keys (id, name, keyHash, keyPrefix, selfServiceEmail) VALUES ('k1', 'n', 'h', 'p', 'a@b.com')",
+    );
+    const keyRows = (await qr.query("SELECT selfServiceEmail FROM api_keys WHERE id = 'k1'")) as Array<{
+      selfServiceEmail: string;
+    }>;
     expect(keyRows[0].selfServiceEmail).toBe('a@b.com');
 
     await qr.release();

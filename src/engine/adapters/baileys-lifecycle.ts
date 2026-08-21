@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as fs from 'fs';
 import type { Agent } from 'https';
 import * as qrcode from 'qrcode';
@@ -11,6 +12,7 @@ import { EngineNotReadyError } from '../../common/errors/engine-not-ready.error'
 import { type createLogger } from '../../common/services/logger.service';
 import { BaileysAdapterConfig } from '../types/baileys.types';
 import { createBaileysLogger } from './baileys-logger';
+import { BaileysVersionResolver } from './baileys-version-resolver';
 import type { BaileysEvents } from './baileys-events';
 import type { BaileysHistory } from './baileys-history';
 import type { BaileysSessionStore } from './baileys-session-store';
@@ -120,6 +122,7 @@ export class BaileysLifecycle {
   private phoneNumber: string | null = null;
   private pushName: string | null = null;
   private intentionalClose = false;
+  private readonly versionResolver: BaileysVersionResolver;
   private connecting = false;
   private reconnectAttempts = 0;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
@@ -128,7 +131,13 @@ export class BaileysLifecycle {
   /** Lazily loaded @whiskeysockets/baileys module (ESM-only; loaded on first connect, not at boot). */
   private lib?: typeof BaileysLib;
 
-  constructor(private readonly host: BaileysLifecycleHost) {}
+  constructor(private readonly host: BaileysLifecycleHost) {
+    this.versionResolver = new BaileysVersionResolver({
+      authDir: this.host.config.authDir || path.dirname(this.host.authPath),
+      sessionId: this.host.config.sessionId,
+      logger: this.host.logger,
+    });
+  }
 
   /** Lazily loaded @whiskeysockets/baileys module (ESM-only; loaded on first connect, not at boot). */
   async loadLib(): Promise<typeof BaileysLib> {
@@ -180,7 +189,7 @@ export class BaileysLifecycle {
     }
     const b = await this.loadLib();
     const { state, saveCreds } = await b.useMultiFileAuthState(this.host.authPath);
-    const { version } = await b.fetchLatestBaileysVersion();
+    const version = await this.versionResolver.resolve(b, { dispatcher: proxyAgent });
     // BaileysLogger matches ILogger exactly; cast needed because the module resolves the type
     // through a deep import path that TypeScript does not auto-unify here. Shared by the key
     // store wrapper below and the socket itself, rather than constructing two instances.
@@ -204,7 +213,7 @@ export class BaileysLifecycle {
     }
 
     // An internal reconnect (transient drop) overwrites this.sock WITHOUT going through
-    // disconnect/logout/destroy, so the previous socket's WebSocket and the 13 ev listeners we
+    // disconnect/logout/destroy, so the previous socket's WebSocket and the 15 ev listeners we
     // register below would leak on every reconnect. Tear the prior socket down first. Detach OUR
     // connection.update listener BEFORE end(): Baileys' own end() synchronously emits a synthetic
     // connection.update {connection:'close'}, which — if still wired — would re-enter
@@ -224,6 +233,7 @@ export class BaileysLifecycle {
         previous.ev.removeAllListeners('lid-mapping.update');
         previous.ev.removeAllListeners('group-participants.update');
         previous.ev.removeAllListeners('groups.update');
+        previous.ev.removeAllListeners('group.join-request');
         previous.ev.removeAllListeners('call');
         previous.ev.removeAllListeners('presence.update');
         void previous.end(undefined);
@@ -271,7 +281,16 @@ export class BaileysLifecycle {
     });
     this.sock = sock;
 
-    sock.ev.on('creds.update', () => void saveCreds());
+    sock.ev.on(
+      'creds.update',
+      () =>
+        void saveCreds().catch(err => {
+          this.host.logger.warn('Baileys creds.update save failed', {
+            sessionId: this.host.config.sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }),
+    );
     sock.ev.on('connection.update', update => this.handleConnectionUpdate(update));
     sock.ev.on('messages.upsert', event => this.host.handleMessagesUpsert(event));
     sock.ev.on('messages.update', updates => this.host.handleMessagesUpdate(updates));
@@ -518,8 +537,8 @@ export class BaileysLifecycle {
         return; // stopped while waiting — abort
       }
       void this.connect().catch(err => {
-        // A failed attempt (e.g. fetchLatestBaileysVersion offline mid-outage) is NOT terminal —
-        // the outage may outlast any fixed attempt budget, so schedule the following attempt.
+        // A failed attempt is NOT terminal: the outage may outlast any fixed attempt budget, so
+        // schedule the following attempt.
         this.host.logger.warn('Baileys reconnect attempt failed; will retry', {
           attempt: this.reconnectAttempts,
           error: err instanceof Error ? err.message : String(err),

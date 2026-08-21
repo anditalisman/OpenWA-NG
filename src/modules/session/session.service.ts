@@ -1,4 +1,5 @@
 import {
+  HttpException,
   Injectable,
   NotFoundException,
   ConflictException,
@@ -12,6 +13,8 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { Repository, In, Not, IsNull, DataSource, FindManyOptions } from 'typeorm';
 import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
+import { setTimeout } from 'node:timers/promises';
+import { EngineTransportError } from '../../common/errors/engine-transport.error';
 import { Session, SessionStatus } from './entities/session.entity';
 import { CreateSessionDto, SessionConfigResponseDto, UpdateSessionConfigDto } from './dto';
 import { EngineRegistry } from '../../engine/engine-registry.service';
@@ -22,25 +25,49 @@ import { PresenceStore, type ChatPresence } from './presence-store.service';
 import { SessionEngineLifecycle, resolveReconnectConfig } from './session-engine-lifecycle.service';
 import { SessionOwnershipService } from './session-ownership.service';
 import { paginate, ListOptions, resolveListWindow } from '../../common/utils/paginate';
-import { isUniqueConstraintError } from '../../common/utils/unique-constraint.util';
+import { isUniqueViolation } from '../../common/utils/db-errors';
 import { resolveFeatureFlags } from '../../config/feature-flags';
 import { IWhatsAppEngine, ChatSummary, ChatState } from '../../engine/interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
 import { HookManager } from '../../core/hooks';
 
-// Re-exported so the existing spec import paths keep working after these moved out.
-export { clampReconnectDelay } from './reconnect-policy';
-export { ACK_RECONCILE_DELAY_MS } from './message-projector.service';
-export {
-  SESSION_WATCHDOG_INTERVAL_MS,
-  SESSION_WATCHDOG_PROBE_TIMEOUT_MS,
-  SESSION_WATCHDOG_MAX_FAILURES,
-} from './session-liveness-watchdog.service';
-export {
-  resolveReconnectConfig,
-  resolveMaxConcurrentSessions,
-  EngineInitTimeoutError,
-} from './session-engine-lifecycle.service';
+/** Stagger before the single transient-launch retry; short - the claim is held while it waits. */
+const SESSION_START_RETRY_DELAY_MS = 2_000;
+
+/**
+ * Driver codes meaning "locked, try again", not "your query is wrong".
+ *
+ * These are unreachable through the message regex below, which is why the code is read separately.
+ * better-sqlite3 reports lock contention as `code: 'SQLITE_BUSY'` with the message `database is
+ * locked`, and TypeORM's QueryFailedError copies the driver's own properties onto itself while
+ * rewriting the message to `SqliteError: database is locked`. So the code survives the wrap and the
+ * token never appears in any message: matching `SQLITE_BUSY` as text could not fire on either shape.
+ */
+const TRANSIENT_DB_CODES = new Set(['SQLITE_BUSY', 'SQLITE_LOCKED']);
+
+/**
+ * A launch failure worth one retry: infrastructure said "not now" (a 5xx, a transport death, a
+ * database error while persisting status), not the session or the caller being refused. HTTP 4xx
+ * and the documented 409 not-ready are deliberate answers, and a lost-claim ConflictException is a
+ * real conflict.
+ */
+function isTransientLaunchFailure(error: unknown): boolean {
+  // EngineTransportError (503) is the one mapped HTTP shape that means infrastructure died
+  // mid-launch (dead page/socket at initialize). Every OTHER HttpException is a deliberate
+  // answer: the 409 not-ready family reflects session state, the 504 auth-timeout family
+  // reflects the account/proxy, and a 4xx is a refusal. The explicit early-exit (not a message
+  // regex relying on the 504 texts never containing 'connection') pins that intent.
+  if (error instanceof EngineTransportError) return true;
+  if (error instanceof HttpException) return false;
+  // TypeORM QueryFailedError and driver errors carry no HttpException shape.
+  if (!(error instanceof Error)) return false;
+  const code: unknown = (error as { code?: unknown }).code;
+  if (typeof code === 'string' && TRANSIENT_DB_CODES.has(code)) return true;
+  return /connection|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|terminating connection/i.test(error.message);
+}
+
+/** Pause between sequential auto-start launches so a burst of Chromium boots does not spike the host. */
+export const AUTOSTART_THROTTLE_MS = 2_000;
 
 /**
  * The session-record API: CRUD over the sessions table, aggregate stats, and the thin engine query
@@ -205,7 +232,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       }
       // Throttle between sequential Chromium launches; no need to wait after the last one.
       if (i < sessions.length - 1) {
-        await this.delay(2000);
+        await setTimeout(AUTOSTART_THROTTLE_MS);
       }
     }
   }
@@ -258,7 +285,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
         return await manager.save(session);
       });
     } catch (err) {
-      if (isUniqueConstraintError(err)) {
+      if (isUniqueViolation(err)) {
         throw new ConflictException(`Session with name '${dto.name}' already exists`);
       }
       throw err;
@@ -427,7 +454,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       throw new ConflictException(`Session ${id} is running on another node`);
     }
     try {
-      return await this.engineLifecycle.start(id);
+      return await this.startWithTransientRetry(id);
     } catch (error) {
       // A failed or refused start must not leave the claim pinned here — the heartbeat would renew
       // it and the session could never be started anywhere else. Released only when nothing is
@@ -435,6 +462,39 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       // runs the engine, and releasing then would invite a peer to open a second connection.
       await this.releaseUnlessEngineActive(id);
       throw error;
+    }
+  }
+
+  /**
+   * One bounded retry for a TRANSIENT launch failure (a database hiccup while persisting the
+   * initial status, a transport blip while the adapter boots). A transient failure during adopt or
+   * boot auto-start used to release the claim and end the story: nothing ever retried, so the
+   * session stayed down until some process restarted. The retry keeps the claim held (the outer
+   * catch only runs when this gives up), and re-claims it if the retry window outlived the lease -
+   * a lapsed claim must not turn the retry into a 409.
+   *
+   * Bounded to one retry on a short stagger: a persistent failure is a real fault, and an
+   * unbounded loop here would hold the concurrency slot hostage. HTTP-shaped refusals (409
+   * not-ready, 4xx) are NOT transient - they propagate immediately.
+   */
+  private async startWithTransientRetry(id: string): Promise<Session> {
+    try {
+      return await this.engineLifecycle.start(id);
+    } catch (error) {
+      if (!isTransientLaunchFailure(error)) throw error;
+      this.logger.warn(`Transient launch failure for session ${id}; retrying once`, {
+        sessionId: id,
+        action: 'session_start_transient_retry',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await setTimeout(SESSION_START_RETRY_DELAY_MS);
+      // The lease may have lapsed while the first attempt ran; the retry must keep holding the
+      // claim, never 409 on the session it already owns.
+      if (this.ownership && !(await this.ownership.claim(id))) {
+        await this.findOne(id);
+        throw new ConflictException(`Session ${id} is running on another node`);
+      }
+      return this.engineLifecycle.start(id);
     }
   }
 
@@ -446,6 +506,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       if (this.ownership) await this.assertNotHeldElsewhere(id);
       session = await this.engineLifecycle.stop(id);
     } catch (error) {
+      // Deliberately no release here, unlike logout()/forceKill(): this catch also carries the
+      // foreign-node 409, where the claim is the peer's and a blanket release would delete it. The
+      // local-502 path keeps the claim, and only claims with a live engine are renewed — it lapses
+      // at lease TTL instead of pinning the session here.
       this.discardStopMarkForMissingSession(id, error);
       throw error;
     }
@@ -495,11 +559,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
 
   async getQRCode(id: string): Promise<{ qrCode: string; status: SessionStatus }> {
     const session = await this.findOne(id);
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started. Call POST /sessions/:id/start first.');
-    }
+    const engine = this.engines.require(
+      id,
+      () => new BadRequestException('Session is not started. Call POST /sessions/:sessionId/start first.'),
+    );
 
     const qrCode = engine.getQRCode();
 
@@ -522,11 +585,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    */
   async requestPairingCode(id: string, phoneNumber: string): Promise<{ pairingCode: string; status: SessionStatus }> {
     const session = await this.findOne(id);
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started. Call POST /sessions/:id/start first.');
-    }
+    const engine = this.engines.require(
+      id,
+      () => new BadRequestException('Session is not started. Call POST /sessions/:sessionId/start first.'),
+    );
     if (session.status === SessionStatus.READY) {
       throw new BadRequestException('Session is already authenticated, no pairing needed');
     }
@@ -539,16 +601,21 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     return this.engines.get(id);
   }
 
+  /**
+   * The engine for a started session, or the documented 400. Routes through engines.require's
+   * default onMissing so the wire contract stays byte-identical to the hand-rolled guards this
+   * replaces ('Session is not started', exactly as each API surface documented it).
+   */
+  private requireEngine(id: string): IWhatsAppEngine {
+    return this.engines.require(id);
+  }
+
   async getGroups(
     id: string,
     opts: ListOptions = {},
   ): Promise<{ id: string; name: string; linkedParentJID?: string | null }[]> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     const groups = await engine.getGroups();
     const mapped = groups.map(g => ({
@@ -561,11 +628,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
 
   async getChats(id: string, opts: ListOptions = {}): Promise<ChatSummary[]> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     // Most-recent first, then bound the response window. Sorting before the cap means a capped
     // response is the N newest chats (what clients show first) rather than an arbitrary slice.
@@ -584,11 +647,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    */
   async subscribeToPresence(id: string, chatId: string): Promise<void> {
     await this.findOne(id);
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     return engine.subscribeToPresence(chatId);
   }
@@ -599,11 +658,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    */
   async setOnlinePresence(id: string, available: boolean): Promise<void> {
     await this.findOne(id);
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     return engine.setOnlinePresence(available);
   }
@@ -618,24 +673,16 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     return this.presence.get(id, chatId);
   }
 
-  async sendSeen(id: string, chatId: string): Promise<boolean> {
+  async sendSeen(id: string, chatId: string, messageIds?: string[]): Promise<boolean> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
+    const engine = this.requireEngine(id);
 
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
-
-    return engine.sendSeen(chatId);
+    return engine.sendSeen(chatId, messageIds);
   }
 
   async markUnread(id: string, chatId: string): Promise<boolean> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     return engine.markUnread(chatId);
   }
@@ -646,11 +693,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    */
   async clearChatMessages(id: string, chatId: string): Promise<boolean> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     return engine.clearChatMessages(chatId);
   }
@@ -662,33 +705,44 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    */
   async archiveChat(id: string, chatId: string, archive: boolean): Promise<boolean> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     return engine.archiveChat(chatId, archive);
   }
 
+  /**
+   * Mute a chat until `muteUntil` (absolute epoch milliseconds), or unmute it with `null`. Unlike
+   * archiveChat there is no "engine declined" outcome — the Baileys mute patch is not keyed to the
+   * chat's last message — so this resolves void and a failure surfaces as an error.
+   */
+  async muteChat(id: string, chatId: string, muteUntil: number | null): Promise<void> {
+    await this.findOne(id); // Verify session exists
+    const engine = this.requireEngine(id);
+
+    return engine.muteChat(chatId, muteUntil);
+  }
+
+  /**
+   * Pin or unpin a chat. Resolves false only when the engine declined — whatsapp-web.js reports
+   * WhatsApp's three-pin cap; Baileys cannot see it and always resolves true.
+   */
+  async pinChat(id: string, chatId: string, pin: boolean): Promise<boolean> {
+    await this.findOne(id); // Verify session exists
+    const engine = this.requireEngine(id);
+
+    return engine.pinChat(chatId, pin);
+  }
+
   async deleteChat(id: string, chatId: string): Promise<boolean> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     return engine.deleteChat(chatId);
   }
 
   async sendChatState(id: string, chatId: string, state: ChatState): Promise<void> {
     await this.findOne(id); // Verify session exists
-    const engine = this.engines.get(id);
-
-    if (!engine) {
-      throw new BadRequestException('Session is not started');
-    }
+    const engine = this.requireEngine(id);
 
     await engine.sendChatState(chatId, state);
   }
@@ -776,9 +830,5 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     sessionIds: string[],
   ): Promise<{ stopped: string[]; notRunning: string[]; failed: string[] }> {
     return this.engineLifecycle.stopOrphanEngines(sessionIds);
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 }

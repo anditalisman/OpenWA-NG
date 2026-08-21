@@ -211,7 +211,10 @@ before(async () => {
   ({ installJsdomGlobals } = await import('../test-helpers/jsdom.ts'));
   await installJsdomGlobals();
   installFetchStub();
-  await import('../i18n/index.ts');
+  // Awaited, not just imported: catalogues are fetched now, so the import only starts the load and
+  // the English copy these tests query by name renders as a raw key until it arrives.
+  const { i18nReady } = await import('../i18n/index.ts');
+  await i18nReady;
   rtl = await import('@testing-library/react');
   ({ RoleProvider } = await import('../components/RoleProvider.tsx'));
   ({ ToastProvider } = await import('../components/Toast.tsx'));
@@ -225,7 +228,7 @@ afterEach(() => {
   overrides = {};
 });
 
-function renderInfrastructure(): { container: HTMLElement } {
+function renderInfrastructure() {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 1_000 } } });
   return rtl.render(
     createElement(
@@ -264,6 +267,39 @@ test('Infrastructure renders and the config form hydrates from /status and /conf
     assert.equal(fieldInput(container, 'Session Data Path').value, '/data/custom-sessions');
     assert.equal(fieldInput(container, 'Browser Arguments').value, '--headless=new --custom-flag');
   });
+});
+
+/**
+ * Every toggle is a bare checkbox inside a `<label class="toggle-switch">` whose only other child is
+ * the decorative slider span, so the wrapping label contributes no text: a screen reader announced
+ * anonymous checkboxes on this page. The visible caption lives in a sibling `.toggle-info > span`,
+ * which each checkbox now references with aria-labelledby.
+ *
+ * This proves the reference actually resolves to text in a real DOM. It covers only the four toggles
+ * this fixture renders (SSL, built-in Redis and the rest sit behind other toggles); a11y-controls
+ * covers the rest of them, and every other page, structurally.
+ */
+test('every rendered toggle exposes an accessible name from its visible caption', async () => {
+  const { screen } = rtl;
+  resetFetchCalls();
+  const { container } = renderInfrastructure();
+  await screen.findByText('Database Configuration');
+
+  const toggles = Array.from(container.querySelectorAll('label.toggle-switch input[type="checkbox"]'));
+  // Guards against a vacuous pass if the page ever stops rendering toggles under this fixture.
+  assert.ok(toggles.length >= 4, `expected the open sections to render toggles, found ${toggles.length}`);
+
+  const unnamed = toggles
+    .map(input => {
+      const id = input.getAttribute('aria-labelledby');
+      const name = id ? (container.querySelector(`#${id}`)?.textContent ?? '').trim() : '';
+      return { id, name };
+    })
+    .filter(t => !t.name)
+    .map(t => t.id ?? '(no aria-labelledby)');
+
+  // Named, not counted: a failure has to say WHICH toggle lost its caption.
+  assert.deepEqual(unnamed, [], `toggles with no accessible name: ${unnamed.join(', ')}`);
 });
 
 test('editing a database field and saving PUTs the edited value in the request body', async () => {
@@ -306,8 +342,8 @@ test('a successful save opens the restart modal', async () => {
 
   const dialog = await screen.findByRole('dialog');
   within(dialog).getByText('Configuration saved');
-  // The idle restart state offers both actions; asserting the button exists (not clicking it) keeps
-  // this test clear of handleRestart's uncancelled setInterval/setTimeout chain.
+  // The idle restart state offers both actions; the click-through (and its timer cleanup on
+  // unmount) is covered by the last test in this file.
   within(dialog).getByRole('button', { name: 'Restart Now' });
   within(dialog).getByRole('button', { name: 'Restart Later' });
 });
@@ -403,26 +439,39 @@ test('the pending-restart note survives a successful save', async () => {
   assert.ok(screen.queryByText(PENDING_RESTART_NOTE), 'the pending-restart note must not vanish once a save succeeds');
 });
 
-test('the engine radio seeds from the saved engine when ENGINE_TYPE is pinned', async () => {
+test('the engine radio seeds from the effective engine when ENGINE_TYPE is pinned', async () => {
   const { screen, waitFor } = rtl;
   resetFetchCalls();
-  overrides = { status: PINNED_STATUS, saved: SAVED_BAILEYS };
+  // Under a pin, /config reports the pinned (effective) engine — the value /status also reports —
+  // so the stock fixtures (both whatsapp-web.js) model the honest pinned response. The radio must
+  // show what actually runs, with the pin note explaining why a save here cannot change it (#1313).
+  overrides = { status: PINNED_STATUS };
   const { container } = renderInfrastructure();
 
   await screen.findByText('Database Configuration');
   await awaitConfigHydrated(container);
 
-  // The running engine is the PINNED value, not a choice the operator made, so showing it would
-  // present the pin as their selection.
   await waitFor(() =>
-    assert.equal(engineRadios(container)[1].checked, true, 'expected the saved engine (baileys) to be selected'),
+    assert.equal(
+      engineRadios(container)[0].checked,
+      true,
+      'expected the pinned engine (whatsapp-web.js) to be selected',
+    ),
+  );
+  assert.ok(
+    screen.getByText(/Pinned by the environment variable ENGINE_TYPE/, { exact: false }),
+    'the pin note must explain why the radio cannot take effect',
   );
 });
 
-test('saving while ENGINE_TYPE is pinned does not write the running engine over the saved one', async () => {
+test('saving while ENGINE_TYPE is pinned omits engine.type so the stored choice survives', async () => {
   const { screen, waitFor, fireEvent } = rtl;
   resetFetchCalls();
-  overrides = { status: PINNED_STATUS, saved: SAVED_BAILEYS };
+  // The stored ENGINE_TYPE in data/.env.generated is invisible to the dashboard while the pin
+  // holds (/config reports the effective engine). The operator never touched the radio here, so
+  // the payload must OMIT type: sending the pinned seed would bake the pin over the stored choice,
+  // and unsetting the variable later could not restore it (#1082).
+  overrides = { status: PINNED_STATUS };
   const { container } = renderInfrastructure();
 
   await screen.findByText('Database Configuration');
@@ -430,12 +479,59 @@ test('saving while ENGINE_TYPE is pinned does not write the running engine over 
 
   fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
 
-  // The operator never touched the engine here. Persisting the pinned value would destroy the choice
-  // held in data/.env.generated, so unsetting the variable later could not restore it.
+  await waitFor(() => {
+    const call = findFetchCall('PUT', '/api/infra/config');
+    assert.ok(call, 'expected a PUT to /infra/config');
+    const body = call!.body as { engine?: { type?: string } };
+    assert.equal(body.engine?.type, undefined, 'an untouched pinned seed must not be persisted');
+  });
+});
+
+test('an operator engine pick under a pin is deliberate and still saved', async () => {
+  const { screen, waitFor, fireEvent } = rtl;
+  resetFetchCalls();
+  // The pin note says dashboard changes won't APPLY until the variable is unset — it does not say
+  // the choice cannot be stored. Clicking a radio is an explicit selection (engineTouched), so it
+  // must reach the payload and replace the stored intent for the post-unpin boot.
+  overrides = { status: PINNED_STATUS };
+  const { container } = renderInfrastructure();
+
+  await screen.findByText('Database Configuration');
+  await awaitConfigHydrated(container);
+
+  fireEvent.click(engineRadios(container)[1]);
+  fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+
   await waitFor(() => {
     const call = findFetchCall('PUT', '/api/infra/config');
     assert.ok(call, 'expected a PUT to /infra/config');
     const body = call!.body as { engine?: { type?: string } };
     assert.equal(body.engine?.type, 'baileys');
   });
+});
+
+// ── Restart-flow timer cleanup on unmount ────────────────────────────────────
+
+test('unmounting mid-restart cancels the health poll and countdown timers', { timeout: 10_000 }, async () => {
+  const { screen, waitFor, fireEvent, within } = rtl;
+  resetFetchCalls();
+  const { unmount } = renderInfrastructure();
+
+  await screen.findByText('Database Configuration');
+  fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Restart Now' }));
+
+  // The restart POST resolving is what arms the 3s health-poll timeout chain and the 1s countdown
+  // interval in useRestartFlow.
+  await waitFor(() => assert.ok(findFetchCall('POST', '/api/infra/restart'), 'expected the restart POST'));
+
+  // Unmount, then outwait the first health poll (fires at 3s): a leaked chain would call
+  // /api/health/ready here. Real timers only — mixing fake timers in after the flow has armed
+  // would leave the pre-armed real handles un-clearable by the mocked clearTimeout.
+  unmount();
+  resetFetchCalls();
+  await new Promise(resolve => setTimeout(resolve, 4000));
+
+  assert.equal(findFetchCall('GET', '/api/health/ready'), undefined);
 });

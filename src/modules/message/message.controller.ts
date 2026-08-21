@@ -14,9 +14,23 @@ import {
   SEND_AUDIO_BODY_EXAMPLES,
   SEND_DOCUMENT_BODY_EXAMPLES,
   SEND_STICKER_BODY_EXAMPLES,
+  SEND_LOCATION_BODY_EXAMPLES,
+  SEND_CONTACT_BODY_EXAMPLES,
+  SEND_POLL_BODY_EXAMPLES,
 } from './dto';
 import { SendTemplateMessageDto } from './dto/send-template.dto';
-import { SendBulkMessageDto, BulkMessageResponseDto } from './dto/bulk-message.dto';
+import {
+  SendBulkMessageDto,
+  BulkMessageResponseDto,
+  BatchStatusResponseDto,
+  BatchCancelResponseDto,
+} from './dto/bulk-message.dto';
+import {
+  MessageActionResponseDto,
+  MessageListResponseDto,
+  ChatHistoryMessageDto,
+  MessageReactionDto,
+} from './dto/message-responses.dto';
 import {
   SendLocationDto,
   SendContactDto,
@@ -65,6 +79,7 @@ export class MessageController {
   @ApiResponse({
     status: 200,
     description: 'Message history',
+    type: MessageListResponseDto,
   })
   async getMessages(
     @Param('sessionId') sessionId: string,
@@ -97,7 +112,6 @@ export class MessageController {
     status: 400,
     description: 'Session not active or invalid request',
   })
-  @ApiResponse({ status: 404, description: 'Session not found' })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   @ApiResponse({ status: 501, description: CUSTOM_LINK_PREVIEW_501 })
   async sendText(@Param('sessionId') sessionId: string, @Body() dto: SendTextMessageDto): Promise<MessageResponseDto> {
@@ -117,7 +131,7 @@ export class MessageController {
     status: 400,
     description: 'Session not active or invalid request',
   })
-  @ApiResponse({ status: 404, description: 'Session or template not found' })
+  @ApiResponse({ status: 404, description: 'Template not found' })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   async sendTemplate(
     @Param('sessionId') sessionId: string,
@@ -226,6 +240,7 @@ export class MessageController {
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Send a location message' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiBody({ type: SendLocationDto, examples: SEND_LOCATION_BODY_EXAMPLES })
   @ApiResponse({
     status: 201,
     description: 'Location sent',
@@ -241,6 +256,7 @@ export class MessageController {
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Send a contact card message' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiBody({ type: SendContactDto, examples: SEND_CONTACT_BODY_EXAMPLES })
   @ApiResponse({
     status: 201,
     description: 'Contact sent',
@@ -276,6 +292,7 @@ export class MessageController {
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Send a native WhatsApp poll' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiBody({ type: SendPollDto, examples: SEND_POLL_BODY_EXAMPLES })
   @ApiResponse({
     status: 201,
     description: 'Poll sent',
@@ -329,6 +346,7 @@ export class MessageController {
   @ApiResponse({
     status: 200,
     description: 'Reaction added or removed. Send empty emoji to remove reaction.',
+    type: MessageActionResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -366,7 +384,7 @@ export class MessageController {
       '(whatsapp-web.js only; loads earlier messages on demand). Forces metadata-only (includeMedia ' +
       'is ignored). Large/slow requests may increase WhatsApp rate-limiting risk; default false.',
   })
-  @ApiResponse({ status: 200, description: 'Chat history (most recent messages)' })
+  @ApiResponse({ status: 200, description: 'Chat history (most recent messages)', type: [ChatHistoryMessageDto] })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   @ApiResponse({ status: 501, description: ENGINE_NOT_SUPPORTED_501 })
   async getChatHistory(
@@ -403,6 +421,7 @@ export class MessageController {
   @ApiResponse({
     status: 200,
     description: 'List of reactions with senders',
+    type: [MessageReactionDto],
   })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   @ApiResponse({ status: 404, description: MESSAGE_NOT_FOUND_404 })
@@ -464,6 +483,7 @@ export class MessageController {
   @ApiResponse({
     status: 200,
     description: 'Message deleted',
+    type: MessageActionResponseDto,
   })
   @ApiResponse({
     status: 400,
@@ -490,7 +510,7 @@ export class MessageController {
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Cast a vote on a poll' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
-  @ApiResponse({ status: 200, description: 'Vote cast' })
+  @ApiResponse({ status: 200, description: 'Vote cast', type: MessageActionResponseDto })
   @ApiResponse({ status: 400, description: 'Session not active, or the target message is not a poll' })
   @ApiResponse({ status: 404, description: 'Poll not found in the chat’s recent history' })
   @ApiResponse({ status: 501, description: 'Not supported on the Baileys engine' })
@@ -506,12 +526,17 @@ export class MessageController {
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Pin a message in its chat' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
-  @ApiResponse({ status: 200, description: 'Message pinned' })
+  @ApiResponse({ status: 200, description: 'Message pinned', type: MessageActionResponseDto })
   @ApiResponse({
     status: 400,
     description: 'Session not active, or durationSeconds is not one of 86400 / 604800 / 2592000',
   })
-  @ApiResponse({ status: 403, description: 'The engine refused the pin — in a group only admins may pin' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'The whatsapp-web.js engine refused the pin (in a group only admins may pin). The Baileys ' +
+      'engine has no acceptance signal and answers 200.',
+  })
   @ApiResponse({ status: 404, description: 'Message not found in the chat' })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   async pinMessage(@Param('sessionId') sessionId: string, @Body() dto: PinMessageDto): Promise<{ success: boolean }> {
@@ -523,9 +548,14 @@ export class MessageController {
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Remove a message’s pin' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
-  @ApiResponse({ status: 200, description: 'Message unpinned' })
+  @ApiResponse({ status: 200, description: 'Message unpinned', type: MessageActionResponseDto })
   @ApiResponse({ status: 400, description: 'Session not active' })
-  @ApiResponse({ status: 403, description: 'The engine refused the unpin — in a group only admins may unpin' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'The whatsapp-web.js engine refused the unpin (in a group only admins may unpin). The Baileys ' +
+      'engine has no acceptance signal and answers 200.',
+  })
   @ApiResponse({ status: 404, description: 'Message not found in the chat' })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   async unpinMessage(
@@ -545,6 +575,7 @@ export class MessageController {
     description:
       'Instruction delivered. On whatsapp-web.js the engine silently ignores a message it will not ' +
       'star, so this does not guarantee the star is set.',
+    type: MessageActionResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Session not active' })
   @ApiResponse({ status: 404, description: 'Message not found in the chat' })
@@ -577,7 +608,10 @@ export class MessageController {
   })
   @ApiResponse({
     status: 403,
-    description: 'The message was not sent by this account, or the engine refused the edit',
+    description:
+      'The engine refused the edit. The Baileys adapter refuses a message the account did not send; ' +
+      'whatsapp-web.js reads the refusal from the page, which also covers a message that is not text. ' +
+      'Past its own guard the Baileys engine has no acceptance signal and answers 200.',
   })
   @ApiResponse({ status: 404, description: 'Message not found' })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
@@ -627,6 +661,7 @@ export class MessageController {
   @ApiResponse({
     status: 200,
     description: 'Batch status and progress',
+    type: BatchStatusResponseDto,
   })
   @ApiResponse({
     status: 404,
@@ -653,6 +688,7 @@ export class MessageController {
   @ApiResponse({
     status: 200,
     description: 'Batch cancelled',
+    type: BatchCancelResponseDto,
   })
   @ApiResponse({
     status: 400,

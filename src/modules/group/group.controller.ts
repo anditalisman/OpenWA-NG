@@ -50,7 +50,7 @@ const PARTICIPANT_ID_400 =
   'A participant does not name an individual. Pass a phone number, `<phone>@c.us` or `<lid>@lid`; ' +
   'a group id or free text is rejected.';
 
-// NOTE: the session→groups LIST lives on the SessionController at GET /sessions/:id/groups (it
+// NOTE: the session→groups LIST lives on the SessionController at GET /sessions/:sessionId/groups (it
 // registered first and owns the canonical narrow projection). A bare @Get() here would collide on
 // the same path pattern (/sessions/{x}/groups) and be shadowed, so this controller owns only the
 // group sub-resource routes (:groupId/...) under the same mount.
@@ -175,6 +175,11 @@ export class GroupController {
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   @ApiResponse({ status: 403, description: ENGINE_REFUSED_403 })
   @ApiResponse({ status: 400, description: PARTICIPANT_ID_400 })
+  @ApiResponse({
+    status: 501,
+    description:
+      'Not supported by the active engine: whatsapp-web.js reaches a WhatsApp Web internal that no longer exists, so group creation is Baileys-only.',
+  })
   async create(@Param('sessionId') sessionId: string, @Body() dto: CreateGroupDto) {
     return this.groupService.createGroup(sessionId, dto.name, dto.participants);
   }
@@ -442,6 +447,7 @@ export class GroupController {
     description: 'Picture URL, or null when the group has none',
     type: GroupPictureResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'The id does not name a group, or the session is not active' })
   @ApiResponse({
     status: 503,
     description: 'WhatsApp did not answer within the request budget — nothing could be read.',
@@ -458,7 +464,10 @@ export class GroupController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'groupId', description: 'Group ID' })
   @ApiResponse({ status: 200, description: 'Group picture updated', type: GroupAckResponseDto })
-  @ApiResponse({ status: 400, description: 'Session not active, or neither url nor base64 supplied' })
+  @ApiResponse({
+    status: 400,
+    description: 'The id does not name a group, or the session is not active, or neither url nor base64 was supplied',
+  })
   @ApiResponse({ status: 403, description: 'The engine refused the change — admin rights required' })
   @ApiResponse({
     status: 503,
@@ -484,6 +493,7 @@ export class GroupController {
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'groupId', description: 'Group ID' })
   @ApiResponse({ status: 200, description: 'Group picture removed', type: GroupAckResponseDto })
+  @ApiResponse({ status: 400, description: 'The id does not name a group, or the session is not active' })
   @ApiResponse({ status: 403, description: 'The engine refused the change — admin rights required' })
   @ApiResponse({
     status: 503,

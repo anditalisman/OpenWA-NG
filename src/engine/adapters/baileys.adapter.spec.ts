@@ -142,6 +142,7 @@ import { EngineRefusedError } from '../../common/errors/engine-refused.error';
 import { InvalidInviteCodeError } from '../../common/errors/invalid-invite-code.error';
 import { GroupNotFoundError } from '../../common/errors/group-not-found.error';
 import { ChannelNotFoundError } from '../../common/errors/channel-not-found.error';
+import { ChatLabelsUnsupportedError } from '../../common/errors/chat-labels-unsupported.error';
 import { Boom } from '@hapi/boom';
 import { EngineTransportError } from '../../common/errors/engine-transport.error';
 import { loadRemoteMediaBuffer } from '../../common/media/load-remote-media';
@@ -149,6 +150,7 @@ import { loadRemoteMediaBuffer } from '../../common/media/load-remote-media';
 const fakeStore = {
   put: jest.fn().mockResolvedValue(undefined),
   getMessage: jest.fn(),
+  getMessages: jest.fn().mockResolvedValue([]),
   clearSession: jest.fn().mockResolvedValue(undefined),
 };
 
@@ -616,9 +618,9 @@ describe('BaileysAdapter lifecycle & status', () => {
   it('I5: first connect failure → initialize() rejects, status FAILED, onError fired', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     const baileys = jest.requireMock('@whiskeysockets/baileys') as {
-      fetchLatestBaileysVersion: jest.Mock;
+      useMultiFileAuthState: jest.Mock;
     };
-    baileys.fetchLatestBaileysVersion.mockRejectedValueOnce(new Error('network error'));
+    baileys.useMultiFileAuthState.mockRejectedValueOnce(new Error('network error'));
 
     const onError = jest.fn();
     const adapter = newAdapter();
@@ -2481,6 +2483,25 @@ describe('BaileysAdapter media sends', () => {
     });
   });
 
+  /**
+   * Audio has no caption, so this tags through contextInfo with no visible @text. It is forwarded
+   * anyway because the route accepts it (SendAudioMessageDto extends SendMediaMessageDto) and
+   * whatsapp-web.js sends it: dropping it here made the same request notify group participants on
+   * one engine and silently not on the other.
+   */
+  it('sendAudioMessage de-normalizes media.mentions into the content', async () => {
+    const adapter = await ready();
+    await adapter.sendAudioMessage('120@g.us', {
+      mimetype: 'audio/mp4',
+      data: Buffer.from([1]),
+      mentions: ['62811@c.us'],
+    });
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '120@g.us',
+      expect.objectContaining({ mentions: ['62811@s.whatsapp.net'] }),
+    );
+  });
+
   it('sendAudioMessage with ptt sends a voice note (ptt:true)', async () => {
     const adapter = await ready();
     await adapter.sendAudioMessage('628111@s.whatsapp.net', {
@@ -2507,6 +2528,26 @@ describe('BaileysAdapter media sends', () => {
     );
     await adapter.sendStickerMessage('628111@s.whatsapp.net', { mimetype: 'image/webp', data: webp });
     expect(fakeSock.sendMessage).toHaveBeenCalledWith('628111@s.whatsapp.net', { sticker: webp });
+  });
+
+  it('sendStickerMessage tags the participants it was given', async () => {
+    // A sticker has neither text nor caption, but stickerMessage carries a contextInfo like any other
+    // content type, so the tag still reaches the participant. The route accepts the field, so dropping
+    // it here left a documented capability doing nothing.
+    const adapter = await ready();
+    const webp = Buffer.from(
+      'UklGRlgAAABXRUJQVlA4WAoAAAAQAAAAAAAAAAAAQUxQSAIAAAAAf1ZQOCAwAAAA0AEAnQEqAQABAAFAJiWgAnS6AfgAA7AA/vLrf/zYFc1z7/f/0uD9Lg/S4P/SkAAA',
+      'base64',
+    );
+    await adapter.sendStickerMessage('628111@s.whatsapp.net', {
+      mimetype: 'image/webp',
+      data: webp,
+      mentions: ['62811@c.us'],
+    });
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith('628111@s.whatsapp.net', {
+      sticker: webp,
+      mentions: ['62811@s.whatsapp.net'],
+    });
   });
 
   it('uses the caller-declared mimetype over the fetched content-type for a URL', async () => {
@@ -2569,9 +2610,47 @@ describe('BaileysAdapter store-backed ops', () => {
     expect(fakeStore.getMessage).toHaveBeenCalledWith('db-uuid-1', 'TARGET');
     expect(fakeSock.sendMessage).toHaveBeenCalledWith(
       '628111@s.whatsapp.net',
-      { text: 'my reply' },
-      { quoted: stored },
+      { text: 'my reply', linkPreview: null },
+      expect.objectContaining({ quoted: stored }),
     );
+  });
+
+  it('replyToMessage tags the participants it was given, de-normalized to the engine dialect', async () => {
+    fakeStore.getMessage.mockResolvedValue(stored);
+    const adapter = await ready();
+    await adapter.replyToMessage('628111@s.whatsapp.net', 'TARGET', 'hi @62811', ['62811@c.us']);
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '628111@s.whatsapp.net',
+      { text: 'hi @62811', mentions: ['62811@s.whatsapp.net'], linkPreview: null },
+      expect.objectContaining({ quoted: stored }),
+    );
+  });
+
+  it('replyToMessage sends no mentions key for an empty list, keeping an untagged reply byte-identical', async () => {
+    // Control for the case above: an empty array must not add the key, or every untagged reply would
+    // start carrying an empty contextInfo tag list.
+    fakeStore.getMessage.mockResolvedValue(stored);
+    const adapter = await ready();
+    await adapter.replyToMessage('628111@s.whatsapp.net', 'TARGET', 'my reply', []);
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '628111@s.whatsapp.net',
+      { text: 'my reply', linkPreview: null },
+      expect.objectContaining({ quoted: stored }),
+    );
+  });
+
+  // The one requireStored path that had no chat check, while whatsapp-web.js resolves the quote by
+  // fetching from the named chat and 404s when the id is not in it.
+  it('replyToMessage throws MessageNotFoundError when the quoted key belongs to another chat', async () => {
+    fakeStore.getMessage.mockResolvedValue({
+      ...stored,
+      key: { ...stored.key, remoteJid: '628999@s.whatsapp.net' },
+    });
+    const adapter = await ready();
+    await expect(adapter.replyToMessage('628111@s.whatsapp.net', 'TARGET', 'my reply')).rejects.toBeInstanceOf(
+      MessageNotFoundError,
+    );
+    expect(fakeSock.sendMessage).not.toHaveBeenCalled();
   });
 
   it('forwardMessage forwards the stored message', async () => {
@@ -2579,6 +2658,20 @@ describe('BaileysAdapter store-backed ops', () => {
     const adapter = await ready();
     await adapter.forwardMessage('628111@s.whatsapp.net', '628222@s.whatsapp.net', 'TARGET');
     expect(fakeSock.sendMessage).toHaveBeenCalledWith('628222@s.whatsapp.net', { forward: stored });
+  });
+
+  // fromChatId was accepted and ignored: any stored id forwarded from any claimed source, while
+  // whatsapp-web.js answered 404 for the same request because it fetches from the named chat.
+  it('forwardMessage throws MessageNotFoundError when the stored key belongs to another chat', async () => {
+    fakeStore.getMessage.mockResolvedValue({
+      ...stored,
+      key: { ...stored.key, remoteJid: '628999@s.whatsapp.net' },
+    });
+    const adapter = await ready();
+    await expect(
+      adapter.forwardMessage('628111@s.whatsapp.net', '628222@s.whatsapp.net', 'TARGET'),
+    ).rejects.toBeInstanceOf(MessageNotFoundError);
+    expect(fakeSock.sendMessage).not.toHaveBeenCalled();
   });
 
   it('reactToMessage sends the stored key', async () => {
@@ -2676,8 +2769,8 @@ describe('BaileysAdapter store-backed ops', () => {
     await adapter.replyToMessage('628111@s.whatsapp.net', 'TARGET', 'my reply');
     expect(fakeSock.sendMessage).toHaveBeenCalledWith(
       '628111@s.whatsapp.net',
-      { text: 'my reply' },
-      { quoted: stored, ephemeralExpiration: 604800 },
+      { text: 'my reply', linkPreview: null },
+      expect.objectContaining({ quoted: stored, ephemeralExpiration: 604800 }),
     );
   });
 
@@ -2710,15 +2803,39 @@ describe('BaileysAdapter store-backed ops', () => {
     expect(fakeSock.sendMessage).not.toHaveBeenCalled();
   });
 
+  it('editMessage re-applies participant tags to the new body', async () => {
+    // An edit REPLACES the content, so a body that still reads "@62811" needs the tag list resent or
+    // the rewritten message loses the tag the original had.
+    fakeStore.getMessage.mockResolvedValue(ownStored);
+    fakeSock.sendMessage.mockResolvedValue({ key: { ...ownStored.key }, messageTimestamp: 1700000010 });
+    const adapter = await ready();
+    await adapter.editMessage('628111@s.whatsapp.net', 'TARGET', 'edited @62811', ['62811@c.us']);
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '628111@s.whatsapp.net',
+      {
+        text: 'edited @62811',
+        mentions: ['62811@s.whatsapp.net'],
+        edit: ownStored.key,
+        linkPreview: null,
+      },
+      expect.objectContaining({ getUrlInfo: expect.any(Function) as unknown }) as unknown,
+    );
+  });
+
   it('editMessage edits via the stored key and returns the (unchanged) message id', async () => {
     fakeStore.getMessage.mockResolvedValue(ownStored);
     fakeSock.sendMessage.mockResolvedValue({ key: { ...ownStored.key }, messageTimestamp: 1700000010 });
     const adapter = await ready();
     const res = await adapter.editMessage('628111@s.whatsapp.net', 'TARGET', 'edited body');
-    expect(fakeSock.sendMessage).toHaveBeenCalledWith('628111@s.whatsapp.net', {
-      text: 'edited body',
-      edit: ownStored.key,
-    });
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '628111@s.whatsapp.net',
+      {
+        text: 'edited body',
+        edit: ownStored.key,
+        linkPreview: null,
+      },
+      expect.objectContaining({ getUrlInfo: expect.any(Function) as unknown }) as unknown,
+    );
     expect(res).toEqual({ id: 'TARGET', timestamp: 1700000010 });
   });
 
@@ -2765,7 +2882,15 @@ describe('BaileysAdapter store-backed ops', () => {
     fakeSock.sendMessage.mockResolvedValue(undefined);
     const adapter = await ready();
     await expect(adapter.editMessage('628111@c.us', 'TARGET', 'x')).resolves.toBeDefined();
-    expect(fakeSock.sendMessage).toHaveBeenCalledWith('628111@c.us', { text: 'x', edit: ownStored.key });
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '628111@c.us',
+      {
+        text: 'x',
+        edit: ownStored.key,
+        linkPreview: null,
+      },
+      expect.objectContaining({ getUrlInfo: expect.any(Function) as unknown }) as unknown,
+    );
   });
 
   it('editMessage sends to the LID-resolved deliverable jid (463 tctoken fix, same as the send path)', async () => {
@@ -2775,7 +2900,15 @@ describe('BaileysAdapter store-backed ops', () => {
     const adapter = await ready();
     await adapter.editMessage('628111@c.us', 'TARGET', 'edited body');
     expect(fakeSock.signalRepository.lidMapping.getLIDForPN).toHaveBeenCalledWith('628111@s.whatsapp.net');
-    expect(fakeSock.sendMessage).toHaveBeenCalledWith('484848@lid', { text: 'edited body', edit: ownStored.key });
+    expect(fakeSock.sendMessage).toHaveBeenCalledWith(
+      '484848@lid',
+      {
+        text: 'edited body',
+        edit: ownStored.key,
+        linkPreview: null,
+      },
+      expect.objectContaining({ getUrlInfo: expect.any(Function) as unknown }) as unknown,
+    );
   });
 
   it('addLabelToChat wires 1:1 to sock.addChatLabel(chatId, labelId)', async () => {
@@ -3189,12 +3322,39 @@ describe('BaileysAdapter group management', () => {
     // non-admin with an error node, which reached the caller as a bare 500.
     ['getGroupInviteCode', (a: BaileysAdapter) => a.getGroupInviteCode('123-456@g.us'), 'groupInviteCode'],
     ['revokeGroupInviteCode', (a: BaileysAdapter) => a.revokeGroupInviteCode('123-456@g.us'), 'groupRevokeInvite'],
+    // Was the one group write with no refusal mapping: an unknown or already-left group answered
+    // an opaque 500 while whatsapp-web.js resolves the chat first and answers 404.
+    ['leaveGroup', (a: BaileysAdapter) => a.leaveGroup('123-456@g.us'), 'groupLeave'],
   ])('%s maps an admin-refused operation to EngineRefusedError (403)', async (_name, call, sockMethod) => {
     (fakeSock as unknown as Record<string, jest.Mock>)[sockMethod].mockRejectedValueOnce(
       Object.assign(new Error('not-authorized'), { data: 401 }),
     );
     const adapter = await ready();
     await expect(call(adapter)).rejects.toBeInstanceOf(EngineRefusedError);
+  });
+
+  // The channel writes map WhatsApp's refusal; these two did not, so unfollowing a channel the
+  // account no longer follows answered 500 where whatsapp-web.js answers the documented 403.
+  it.each([
+    ['unsubscribeFromChannel', (a: BaileysAdapter) => a.unsubscribeFromChannel('120@newsletter'), 'newsletterUnfollow'],
+  ])('%s maps a refused channel write to EngineRefusedError (403)', async (_name, call, sockMethod) => {
+    (fakeSock as unknown as Record<string, jest.Mock>)[sockMethod].mockRejectedValueOnce(
+      Object.assign(new Error('not-authorized'), { data: 401 }),
+    );
+    const adapter = await ready();
+    await expect(call(adapter)).rejects.toBeInstanceOf(EngineRefusedError);
+  });
+
+  // Labels are a Business chat feature with no channel equivalent: whatsapp-web.js refuses the jid,
+  // this engine forwarded it and reported success while nothing was labelled.
+  it.each([
+    ['addLabelToChat', (a: BaileysAdapter) => a.addLabelToChat('120@newsletter', 'L1')],
+    ['removeLabelFromChat', (a: BaileysAdapter) => a.removeLabelFromChat('120@newsletter', 'L1')],
+  ])('%s refuses a channel jid instead of reporting success', async (_name, call) => {
+    const adapter = await ready();
+    await expect(call(adapter)).rejects.toBeInstanceOf(ChatLabelsUnsupportedError);
+    expect(fakeSock.addChatLabel).not.toHaveBeenCalled();
+    expect(fakeSock.removeChatLabel).not.toHaveBeenCalled();
   });
 
   it('a transport death on a group write propagates untouched — not folded into a 403', async () => {

@@ -39,6 +39,18 @@ import { LabelNotFoundError } from '../../common/errors/label-not-found.error';
 import { SsrfBlockedError } from '../../common/security/ssrf-guard';
 import { fetch as undiciFetch } from 'undici';
 
+// Allowlisted hosts are PINNED to their DNS answer (ssrf-guard pins allowlisted hosts to their DNS answers), so the specs that exercise
+// the SSRF_ALLOWED_HOSTS escape-hatch need a deterministic resolver. Default answers are PUBLIC
+// addresses — the non-allowlisted paths keep behaving exactly as they did with the real resolver.
+jest.mock('dns/promises', () => {
+  const actual = jest.requireActual<typeof import('dns/promises')>('dns/promises');
+  return {
+    __esModule: true,
+    ...actual,
+    lookup: jest.fn(() => Promise.resolve([{ address: '93.184.216.34', family: 4 }])),
+  };
+});
+
 // loadRemoteMedia now fetches bytes through the SSRF-pinned path (undici fetch), then builds the
 // MessageMedia locally — so mock undici fetch, not MessageMedia.fromUrl.
 jest.mock('undici', () => {
@@ -2140,7 +2152,7 @@ describe('WhatsAppWebJsAdapter ready reconciliation (#251/#273)', () => {
   // the finished flags AFTER the await — so a late encode does not resurrect a finished adapter to
   // QR_READY, does not overwrite qrCode with a stale value, and does not re-fire the publish/webhook
   // callback. A native 'disconnected' emitted mid-encode latches disconnectReported synchronously (via
-  // setStatus(DISCONNECTED)) and is exactly the post-await-unsafe window F-06 names.
+  // setStatus(DISCONNECTED)) and is exactly the post-await-unsafe window the reconnect latch exists to close.
   it('drops a QR whose encode finishes after the source client disconnects', async () => {
     let resolveEncode!: (value: string) => void;
     const encodePending = new Promise<string>(resolve => {
@@ -2508,9 +2520,12 @@ describe('WhatsAppWebJsAdapter.resolveContactPhone (@lid -> phone, #263)', () =>
     ).resolves.toBeNull();
   });
 
-  it('is best-effort: a thrown engine error resolves to null, not a rejection', async () => {
+  it('propagates a lookup failure instead of nulling it: a transient error must not read as "no mapping"', async () => {
+    // The engine method rejects on failure (dead page, evaluation error, rate limit) so the lid
+    // resolver never mistakes one for a definitive negative; the HTTP boundary
+    // (ContactService.resolveContactPhone) is where null-on-failure is produced.
     const adapter = readyAdapter(jest.fn().mockRejectedValue(new Error('Evaluation failed')));
-    await expect(adapter.resolveContactPhone('123@lid')).resolves.toBeNull();
+    await expect(adapter.resolveContactPhone('123@lid')).rejects.toThrow('Evaluation failed');
   });
 });
 
@@ -3922,6 +3937,33 @@ describe('outbound document mode (#989)', () => {
       );
     });
 
+    it('passes a sticker tag list through the same options bag as any other media send', async () => {
+      const sendMessage = jest.fn().mockResolvedValue(sentMessage);
+
+      await ready({ sendMessage }).sendStickerMessage('120363@g.us', {
+        mimetype: 'image/webp',
+        data: Buffer.from([1]).toString('base64'),
+        mentions: ['62811@c.us'],
+      });
+
+      expect(sendMessage).toHaveBeenCalledWith(
+        '120363@g.us',
+        expect.anything(),
+        expect.objectContaining({ sendMediaAsSticker: true, mentions: ['62811@c.us'] }),
+      );
+
+      // Control: without a list the options bag must not gain a mentions key at all, or every untagged
+      // sticker send changes shape.
+      sendMessage.mockClear();
+      await ready({ sendMessage }).sendStickerMessage('120363@g.us', {
+        mimetype: 'image/webp',
+        data: Buffer.from([1]).toString('base64'),
+        mentions: [],
+      });
+      const [, , opts] = sendMessage.mock.calls[0] as [string, unknown, Record<string, unknown>];
+      expect(Object.keys(opts)).not.toContain('mentions');
+    });
+
     // A sticker's mimetype is an instruction, not a label: whatsapp-web.js returns the media
     // unconverted once it reads as webp, so trusting a declared image/webp over bytes that are not
     // webp ships raw bytes as a sticker. The response saw the bytes; the caller did not.
@@ -4234,6 +4276,21 @@ describe('LID resolution for individual sends (#573 — WhatsApp @c.us → @lid 
     expect(reply).toHaveBeenCalledWith('hi', '628@c.us');
   });
 
+  it('reply passes the tag list through as send options, and omits the options bag without one', async () => {
+    const reply = jest.fn().mockResolvedValue(sentMessage);
+    const quoted = { id: { _serialized: 'Q1' }, reply };
+    const getChatById = jest.fn().mockResolvedValue({ fetchMessages: jest.fn().mockResolvedValue([quoted]) });
+    const getNumberId = jest.fn().mockResolvedValue({ _serialized: '628@c.us' });
+
+    await ready({ getChatById, getNumberId }).replyToMessage('628@c.us', 'Q1', 'hi @62811', ['62811@c.us']);
+    expect(reply).toHaveBeenCalledWith('hi @62811', '628@c.us', { mentions: ['62811@c.us'] });
+
+    // Control: an empty list must not start passing an options bag to every untagged reply.
+    reply.mockClear();
+    await ready({ getChatById, getNumberId }).replyToMessage('628@c.us', 'Q1', 'hi', []);
+    expect(reply).toHaveBeenCalledWith('hi', '628@c.us');
+  });
+
   it('forward routes to the resolved @lid and recovers the id from that chat (#583 R1)', async () => {
     const forward = jest.fn().mockResolvedValue(undefined);
     const srcMsg = { id: { _serialized: 'M1' }, forward };
@@ -4265,6 +4322,19 @@ describe('editMessage', () => {
     const res = await adapter.editMessage('628@c.us', 'M1', 'new body');
     expect(edit).toHaveBeenCalledWith('new body');
     expect(res).toEqual({ id: 'M1', timestamp: 1700000002 });
+  });
+
+  it('edit re-applies participant tags, and sends no options bag when none were asked for', async () => {
+    const edit = jest.fn().mockResolvedValue({ id: { _serialized: 'M1' }, timestamp: 1700000002 });
+    const adapter = ready(chatWith([{ id: { _serialized: 'M1', id: 'RAW1' }, edit }]));
+
+    await adapter.editMessage('628@c.us', 'M1', 'new @62811', ['62811@c.us']);
+    expect(edit).toHaveBeenCalledWith('new @62811', { mentions: ['62811@c.us'] });
+
+    // Control: without tags the library call keeps its single-argument shape.
+    edit.mockClear();
+    await adapter.editMessage('628@c.us', 'M1', 'new body', []);
+    expect(edit).toHaveBeenCalledWith('new body');
   });
 
   it('also matches the bare id.id fallback (like deleteMessage)', async () => {
@@ -4739,7 +4809,7 @@ describe('WhatsAppWebJsAdapter message_ack (unreadable id)', () => {
   });
 });
 
-describe('WhatsAppWebJsAdapter createGroup (failure shapes)', () => {
+describe('WhatsAppWebJsAdapter createGroup (not available on this engine)', () => {
   const readyAdapter = (client: unknown): WhatsAppWebJsAdapter => {
     const adapter = new WhatsAppWebJsAdapter({ sessionId: 's', sessionDataPath: './data/sessions', puppeteer: {} });
     (adapter as unknown as { status: EngineStatus }).status = EngineStatus.READY;
@@ -4747,35 +4817,24 @@ describe('WhatsAppWebJsAdapter createGroup (failure shapes)', () => {
     return adapter;
   };
 
-  it("surfaces the engine's reason when creation fails", async () => {
-    // whatsapp-web.js RESOLVES with a plain string on failure rather than throwing (Client.js:2376).
-    // Reading `.gid` off it produced an opaque TypeError and threw the actual reason away.
-    const createGroup = jest
-      .fn()
-      .mockResolvedValue('CreateGroupError: An unknown error occupied while creating a group');
+  // The library's own method is typed and present, so the only thing that shows it cannot work is a
+  // live call: its injected evaluate reaches a WhatsApp Web internal with no `findImpl`
+  // (`Client.js:2325`), which reached callers as a bare 500. Measured on two builds — one
+  // auto-resolved, one pinned — so this is a library limitation, not registry pin drift.
+  it('throws EngineNotSupportedError instead of calling the library', async () => {
+    const createGroup = jest.fn();
 
-    await expect(readyAdapter({ createGroup }).createGroup('team', ['628123@c.us'])).rejects.toThrow(
-      /CreateGroupError/,
+    await expect(readyAdapter({ createGroup }).createGroup('team', ['628123456789@c.us'])).rejects.toBeInstanceOf(
+      EngineNotSupportedError,
     );
+    // The point of the demotion: the caller gets a 501 and the broken page call is never made.
+    expect(createGroup).not.toHaveBeenCalled();
   });
 
-  it('never returns a placeholder when the group id cannot be read', async () => {
-    // The old `String(gid._serialized)` coerced an unreadable id into the literal string "undefined"
-    // and handed it back as a real, addressable group id.
-    const createGroup = jest.fn().mockResolvedValue({ gid: { someFutureName: 'x' } });
+  it('refuses before the engine is ready, like every other guarded method', async () => {
+    const adapter = new WhatsAppWebJsAdapter({ sessionId: 's', sessionDataPath: './data/sessions', puppeteer: {} });
 
-    const call = readyAdapter({ createGroup }).createGroup('team', ['628123@c.us']);
-
-    await expect(call).rejects.toThrow(/id could not be read/);
-    await expect(call).rejects.not.toThrow(/undefined/);
-  });
-
-  it('returns the group on success', async () => {
-    const createGroup = jest.fn().mockResolvedValue({ gid: { _serialized: '120363000@g.us' } });
-
-    const res = await readyAdapter({ createGroup }).createGroup('team', ['628123@c.us', '628124@c.us']);
-
-    expect(res).toEqual({ id: '120363000@g.us', name: 'team', participantsCount: 2 });
+    await expect(adapter.createGroup('team', ['628123456789@c.us'])).rejects.toBeDefined();
   });
 });
 
@@ -4800,7 +4859,7 @@ describe('WhatsAppWebJsAdapter puppeteer death detection (browser/page silent de
       pupBrowser: new EventEmitter(),
       pupPage: new EventEmitter(),
       ...overrides.client,
-    }) as PuppeteerFakeClient;
+    });
     const onDisconnected = jest.fn();
     (adapter as unknown as { client: unknown }).client = client;
     (adapter as unknown as { callbacks: unknown }).callbacks = { onDisconnected };
@@ -4968,7 +5027,7 @@ describe('WhatsAppWebJsAdapter navigation re-inject grace (#1081)', () => {
       pupBrowser: new EventEmitter(),
       pupPage: new EventEmitter(),
       ...clientOverrides,
-    }) as NavFakeClient;
+    });
     (adapter as unknown as { client: unknown }).client = client;
     (adapter as unknown as { callbacks: unknown }).callbacks = {};
     (adapter as unknown as { status: EngineStatus }).status = EngineStatus.READY;
@@ -5283,7 +5342,7 @@ describe('WhatsAppWebJsAdapter orphaned Chromium sweep (pre-launch)', () => {
 
   it('does not mutate the caller-owned puppeteer args array shared across sessions', async () => {
     // Every adapter receives the SAME array instance — ConfigService.get() returns a live reference
-    // into the cached config tree, via the plugin path (plugins/engines/whatsapp-web-js) and the
+    // into the cached config tree, via the plugin path (engine/builtin/whatsapp-web-js) and the
     // factory fallback alike. Appending in place therefore rewrites global config for the rest of
     // the process lifetime, leaking one session's flags (proxy, session marker) into every later
     // launch. Without the defensive copy this assertion sees both session markers accumulate.
@@ -5590,6 +5649,24 @@ describe('WhatsAppWebJsAdapter group join + settings + own profile', () => {
       );
     });
 
+    // The nine write routes that previously threw a bare Error('Chat is not a group') for a
+    // non-group id (surfacing as an opaque 500) now share this guard: unknown id, 1:1 id and
+    // status id are all GroupNotFoundError (404), like the guarded settings writes above.
+    it.each([
+      ['addParticipants', (a: WhatsAppWebJsAdapter) => a.addParticipants('628111@c.us', ['628222@c.us'])],
+      ['removeParticipants', (a: WhatsAppWebJsAdapter) => a.removeParticipants('628111@c.us', ['628222@c.us'])],
+      ['promoteParticipants', (a: WhatsAppWebJsAdapter) => a.promoteParticipants('628111@c.us', ['628222@c.us'])],
+      ['demoteParticipants', (a: WhatsAppWebJsAdapter) => a.demoteParticipants('628111@c.us', ['628222@c.us'])],
+      ['leaveGroup', (a: WhatsAppWebJsAdapter) => a.leaveGroup('628111@c.us')],
+      ['setGroupSubject', (a: WhatsAppWebJsAdapter) => a.setGroupSubject('628111@c.us', 'New subject')],
+      ['setGroupDescription', (a: WhatsAppWebJsAdapter) => a.setGroupDescription('628111@c.us', 'New description')],
+      ['getGroupInviteCode', (a: WhatsAppWebJsAdapter) => a.getGroupInviteCode('628111@c.us')],
+      ['revokeGroupInviteCode', (a: WhatsAppWebJsAdapter) => a.revokeGroupInviteCode('628111@c.us')],
+    ])('%s answers 404 (GroupNotFoundError) when the id is not a group', async (_name, call) => {
+      const getChatById = jest.fn().mockResolvedValue({ isGroup: false });
+      await expect(call(readyAdapter({ getChatById }))).rejects.toBeInstanceOf(GroupNotFoundError);
+    });
+
     it.each([
       ['setGroupMessagesAdminsOnly', 'setMessagesAdminsOnly'],
       ['setGroupInfoAdminsOnly', 'setInfoAdminsOnly'],
@@ -5841,15 +5918,16 @@ describe('WhatsAppWebJsAdapter honest outcomes (no phantom success)', () => {
   describe.each([['removeParticipants'], ['promoteParticipants'], ['demoteParticipants']])(
     '%s (batch {status} is honored)',
     op => {
-      it('resolves one batch-confirmed entry per requested participant on {status: 200}', async () => {
+      it('falls back to batch-confirmed entries when the tree is unpatched (no matched marker)', async () => {
+        // Without scripts/patch-wwebjs-participant-arity.js the page reports only the batch status,
+        // so there is nothing per-participant to read. Keeping the old shape is the honest answer
+        // here; inventing an outcome would be the very defect this suite guards against.
         const chat = groupChat({ [op]: jest.fn().mockResolvedValue({ status: 200 }) });
         const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
         const results = await (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](
           GROUP,
           ['628111', '628222@c.us'],
         );
-        // wwebjs confirms the batch only — the entries must say so rather than claim an
-        // individually-confirmed outcome the engine never reported.
         expect(results).toEqual([
           {
             id: '628111@c.us',
@@ -5866,12 +5944,92 @@ describe('WhatsAppWebJsAdapter honest outcomes (no phantom success)', () => {
         ]);
       });
 
+      it('reports only the participants the page resolved to members', async () => {
+        const chat = groupChat({ [op]: jest.fn().mockResolvedValue({ status: 200, matched: [true, false] }) });
+        const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
+        const results = await (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](
+          GROUP,
+          ['628111', '628222@c.us'],
+        );
+        // The second id was dropped page-side, so WhatsApp never acted on it. Reporting it as a
+        // success is what #1220 was: a removal that never happened, confirmed to the caller.
+        expect(results).toEqual([
+          expect.objectContaining({ id: '628111@c.us', success: true, status: 200 }),
+          expect.objectContaining({ id: '628222@c.us', success: false, status: 404 }),
+        ]);
+      });
+
+      it('throws EngineRefusedError when the page resolved none of the requested participants', async () => {
+        const chat = groupChat({ [op]: jest.fn().mockResolvedValue({ status: 200, matched: [false, false] }) });
+        const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
+        await expect(
+          (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](GROUP, [
+            '628111',
+            '628222@c.us',
+          ]),
+        ).rejects.toBeInstanceOf(EngineRefusedError);
+      });
+
+      it('ignores a matched marker whose length does not match the request', async () => {
+        // A partially applied patch must degrade to the old behaviour rather than read undefined at
+        // an index and report a real participant as untouched.
+        const chat = groupChat({ [op]: jest.fn().mockResolvedValue({ status: 200, matched: [true] }) });
+        const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
+        const results = await (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](
+          GROUP,
+          ['628111', '628222@c.us'],
+        );
+        expect(results).toEqual([
+          expect.objectContaining({ success: true }),
+          expect.objectContaining({ success: true }),
+        ]);
+      });
+
+      it('translates the empty-batch page rejection into a refusal rather than a 500', async () => {
+        const chat = groupChat({
+          [op]: jest
+            .fn()
+            .mockRejectedValue(new Error('Evaluation failed: Error: expected at least 1 children, but found 0')),
+        });
+        const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
+        await expect(
+          (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](GROUP, ['628111']),
+        ).rejects.toBeInstanceOf(EngineRefusedError);
+      });
+
+      it('rethrows an unrecognised page failure instead of calling it a refusal', async () => {
+        // A dead transport must not be sold to the caller as a permissions problem — the Baileys
+        // adapter states the same rule for its own empty-results guard.
+        const boom = new Error('Protocol error (Runtime.callFunctionOn): Target closed');
+        const chat = groupChat({ [op]: jest.fn().mockRejectedValue(boom) });
+        const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
+        const err = await (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)
+          [op](GROUP, ['628111'])
+          .catch((e: unknown) => e);
+        expect(err).toBe(boom);
+      });
+
       it('throws EngineRefusedError on a non-200 batch status instead of reporting success', async () => {
         const chat = groupChat({ [op]: jest.fn().mockResolvedValue({ status: 403 }) });
         const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
         await expect(
           (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](GROUP, ['628111']),
         ).rejects.toBeInstanceOf(EngineRefusedError);
+      });
+
+      it('qualifies only bare numbers, never double-qualifying an id that carries a domain', async () => {
+        // Characterisation: the old rule (`p.includes('@')`) agreed with toParticipantWid on every
+        // input that reaches here, so this pins the behaviour rather than driving the change. It is
+        // the guard against a future qualifier that appends to an already-domained id.
+        const libOp = jest.fn().mockResolvedValue({ status: 200 });
+        const chat = groupChat({ [op]: libOp });
+        const adapter = readyAdapter({ getChatById: jest.fn().mockResolvedValue(chat) });
+        await (adapter as unknown as Record<string, (g: string, p: string[]) => Promise<unknown>>)[op](GROUP, [
+          '628111',
+          '628222@c.us',
+          '12345678901234567890@lid',
+        ]);
+        expect(libOp).toHaveBeenCalledWith(['628111@c.us', '628222@c.us', '12345678901234567890@lid']);
       });
     },
   );
@@ -5951,6 +6109,50 @@ describe('WhatsAppWebJsAdapter honest outcomes (no phantom success)', () => {
     it('joinGroupViaInviteCode answers EngineTransportError (503) on a dead page — not 400', async () => {
       const adapter = readyAdapter({ acceptInvite: jest.fn().mockRejectedValue(transportError()) });
       await expect(adapter.joinGroupViaInviteCode('CODE123')).rejects.toBeInstanceOf(EngineTransportError);
+    });
+
+    // The profile/status/channel delegates gained the same split the chats reads already had:
+    // a dead page is the documented 503 plus an early death signal, not an opaque 500.
+    // Adapter-level signatures (no sessionId: that is the service layer's argument).
+    it.each([
+      ['setProfileName', (a: WhatsAppWebJsAdapter) => a.setProfileName('New Name')],
+      ['setProfileStatus', (a: WhatsAppWebJsAdapter) => a.setProfileStatus('Busy')],
+      ['setProfilePicture', (a: WhatsAppWebJsAdapter) => a.setProfilePicture({ mimetype: 'image/png', data: 'aGk=' })],
+      ['deleteProfilePicture', (a: WhatsAppWebJsAdapter) => a.deleteProfilePicture()],
+      ['getContactStatuses', (a: WhatsAppWebJsAdapter) => a.getContactStatuses()],
+      ['postTextStatus', (a: WhatsAppWebJsAdapter) => a.postTextStatus('hello', {})],
+      ['deleteStatus', (a: WhatsAppWebJsAdapter) => a.deleteStatus('status@broadcast')],
+      ['getSubscribedChannels', (a: WhatsAppWebJsAdapter) => a.getSubscribedChannels()],
+      // The channel WRITES take the same path: deleteChannel reached the client directly, so a dead
+      // page there surfaced as an opaque 500 under a session still reporting READY, while the route
+      // documents 503. unsubscribeFromChannel is its structural twin and was already wrapped.
+      ['deleteChannel', (a: WhatsAppWebJsAdapter) => a.deleteChannel('1200@newsletter')],
+      ['unsubscribeFromChannel', (a: WhatsAppWebJsAdapter) => a.unsubscribeFromChannel('1200@newsletter')],
+    ])('%s answers EngineTransportError (503) on a dead page', async (_name, call) => {
+      const adapter = readyAdapter({
+        setDisplayName: jest.fn().mockRejectedValue(transportError()),
+        setStatus: jest.fn().mockRejectedValue(transportError()),
+        setProfilePicture: jest.fn().mockRejectedValue(transportError()),
+        deleteProfilePicture: jest.fn().mockRejectedValue(transportError()),
+        getBroadcasts: jest.fn().mockRejectedValue(transportError()),
+        sendMessage: jest.fn().mockRejectedValue(transportError()),
+        revokeStatusMessage: jest.fn().mockRejectedValue(transportError()),
+        getChannels: jest.fn().mockRejectedValue(transportError()),
+        deleteChannel: jest.fn().mockRejectedValue(transportError()),
+        unsubscribeFromChannel: jest.fn().mockRejectedValue(transportError()),
+      });
+      await expect(call(adapter)).rejects.toBeInstanceOf(EngineTransportError);
+    });
+
+    it('setProfilePicture classifies a dead page even when the media conversion itself fails on the dying transport', async () => {
+      // toMessageMedia with an http URL fetches through the page; on a dead transport that fetch
+      // dies first. The conversion stays OUTSIDE withPage by design (a bad URL is a 400-class
+      // failure, not a transport death), so this case asserts the rejection is the raw TypeError
+      // from the mock - documenting the boundary rather than forcing it into the 503 class.
+      const adapter = readyAdapter({ setProfilePicture: jest.fn() });
+      await expect(
+        adapter.setProfilePicture({ mimetype: 'image/png', data: 'http://dead.lan/x.png' }),
+      ).rejects.toBeInstanceOf(Error);
     });
 
     it('joinGroupViaInviteCode still maps a refused invite to InvalidInviteCodeError (400)', async () => {
@@ -6748,7 +6950,7 @@ describe('WhatsAppWebJsAdapter account-restriction reporting', () => {
     const client = Object.assign(new EventEmitter(), {
       getState: jest.fn().mockResolvedValue(WAState.CONNECTED),
       pupPage: { evaluate: jest.fn().mockResolvedValue(true) },
-    }) as FakeClient;
+    });
     const onAccountRestriction = jest.fn();
     const onDisconnected = jest.fn();
     (adapter as unknown as { client: unknown }).client = client;

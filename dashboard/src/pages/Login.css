@@ -136,7 +136,7 @@
 
 .login-container .error-message {
   display: block;
-  color: var(--error);
+  color: var(--error-text);
   font-size: 0.875rem;
   margin-top: 0.5rem;
 }
@@ -170,13 +170,43 @@
 }
 
 .login-container .login-help a {
-  color: var(--primary);
+  color: var(--primary-text);
   text-decoration: none;
   font-weight: 500;
 }
 
 .login-container .login-help a:hover {
   text-decoration: underline;
+}
+
+.login-container .login-footer {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.login-container .login-footer .github-link {
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.login-container .login-footer .github-link:hover {
+  color: var(--primary-text);
+}
+
+.login-container .login-footer a {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+
+.login-container .login-footer a:hover {
+  color: var(--text-secondary);
 }
 
 /* Mobile Responsive */

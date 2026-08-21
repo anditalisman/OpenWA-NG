@@ -8,7 +8,10 @@ import { SendPacingService } from '../message/send-pacing.service';
 
 /** Pacing is off by default; its own spec covers the governor, so here it must simply not refuse. */
 const inertPacing = (): SendPacingService =>
-  ({ assertReachoutAllowed: jest.fn().mockResolvedValue(undefined) }) as unknown as SendPacingService;
+  ({
+    assertReachoutAllowed: jest.fn().mockResolvedValue(0),
+    chargeGroupReachouts: jest.fn(),
+  }) as unknown as SendPacingService;
 
 describe('GroupService', () => {
   const makeService = (engine: Partial<IWhatsAppEngine> | undefined, pacing: SendPacingService = inertPacing()) => {
@@ -16,6 +19,62 @@ describe('GroupService', () => {
     if (engine) engines.set('s1', engine as IWhatsAppEngine);
     return new GroupService(engines, pacing);
   };
+
+  const makeServiceWithPacing = (
+    engine: Partial<IWhatsAppEngine>,
+    pacing: Record<string, jest.Mock>,
+  ): { svc: GroupService; pacing: Record<string, jest.Mock> } => {
+    const engines = new EngineRegistry();
+    engines.set('s1', engine as IWhatsAppEngine);
+    return { svc: new GroupService(engines, pacing as unknown as SendPacingService), pacing };
+  };
+
+  // On Baileys the id reaches sock.updateProfilePicture/removeProfilePicture verbatim, and Baileys
+  // omits the `target` attribute whenever the jid is the account's own — so a 1:1 id passed where a
+  // group id belongs replaced or PERMANENTLY DELETED the account's own profile picture and answered
+  // 200. whatsapp-web.js refused the same input via requireGroupChat, so the two engines disagreed
+  // destructively on a documented route. Guarded in the service so both agree, and so the id never
+  // reaches an engine at all.
+  describe('group-picture routes reject an id that does not name a group', () => {
+    const engine = () => ({
+      setGroupPicture: jest.fn().mockResolvedValue(undefined),
+      deleteGroupPicture: jest.fn().mockResolvedValue(undefined),
+      getProfilePicture: jest.fn().mockResolvedValue('https://cdn/x.jpg'),
+    });
+
+    it.each([
+      ["the account's own 1:1 jid", '628123456789@c.us'],
+      ['a lid', '99887766@lid'],
+      ['a channel', '120363000000000000@newsletter'],
+    ])('refuses %s', (_label, id) => {
+      const e = engine();
+      const svc = makeService(e);
+
+      // Thrown synchronously, matching this service's existing guards; the controller methods are
+      // async, so it still surfaces as a 400 at the HTTP layer.
+      expect(() => svc.setGroupPicture('s1', id, { base64: 'AAA=', mimetype: 'image/jpeg' })).toThrow(
+        BadRequestException,
+      );
+      expect(() => svc.deleteGroupPicture('s1', id)).toThrow(BadRequestException);
+      expect(() => svc.getGroupPicture('s1', id)).toThrow(BadRequestException);
+
+      expect(e.setGroupPicture).not.toHaveBeenCalled();
+      expect(e.deleteGroupPicture).not.toHaveBeenCalled();
+      expect(e.getProfilePicture).not.toHaveBeenCalled();
+    });
+
+    // Negative twin: the guard must not refuse the ids the routes exist to serve.
+    it('still forwards a real group id', async () => {
+      const e = engine();
+      const svc = makeService(e);
+
+      await svc.deleteGroupPicture('s1', '123456789-987654321@g.us');
+      await svc.getGroupPicture('s1', '123456789-987654321@g.us');
+
+      expect(e.deleteGroupPicture).toHaveBeenCalledWith('123456789-987654321@g.us');
+      expect(e.getProfilePicture).toHaveBeenCalledWith('123456789-987654321@g.us');
+    });
+  });
 
   it('throws 400 "Session is not started" when the engine is missing (guard preserved)', () => {
     // The guard throws synchronously; the controller methods are `async`, so this still surfaces
@@ -56,6 +115,45 @@ describe('GroupService', () => {
   it('returns the group when found', async () => {
     const svc = makeService({ getGroupInfo: jest.fn().mockResolvedValue({ id: 'g1', name: 'G' }) });
     await expect(svc.getGroupInfo('s1', 'g1')).resolves.toEqual({ id: 'g1', name: 'G' });
+  });
+
+  it('charges the cold-reachout budget only after the engine call resolves', async () => {
+    const addParticipants = jest.fn().mockResolvedValue(undefined);
+    const { svc, pacing } = makeServiceWithPacing(
+      { addParticipants },
+      {
+        assertReachoutAllowed: jest.fn().mockResolvedValue(3),
+        chargeGroupReachouts: jest.fn(),
+      },
+    );
+    await svc.addParticipants('s1', 'g1', ['628111111@c.us']);
+    expect(pacing.chargeGroupReachouts).toHaveBeenCalledWith('s1', 3);
+  });
+
+  it('does not charge the budget when the engine refuses the add (the participants were never contacted)', async () => {
+    const addParticipants = jest.fn().mockRejectedValue(new Error('no admin rights'));
+    const { svc, pacing } = makeServiceWithPacing(
+      { addParticipants },
+      {
+        assertReachoutAllowed: jest.fn().mockResolvedValue(3),
+        chargeGroupReachouts: jest.fn(),
+      },
+    );
+    await expect(svc.addParticipants('s1', 'g1', ['628111111@c.us'])).rejects.toThrow('no admin rights');
+    expect(pacing.chargeGroupReachouts).not.toHaveBeenCalled();
+  });
+
+  it('does not charge the budget when createGroup fails (whatsapp-web.js always 501s)', async () => {
+    const createGroup = jest.fn().mockRejectedValue(new Error('EngineNotSupportedError'));
+    const { svc, pacing } = makeServiceWithPacing(
+      { createGroup },
+      {
+        assertReachoutAllowed: jest.fn().mockResolvedValue(2),
+        chargeGroupReachouts: jest.fn(),
+      },
+    );
+    await expect(svc.createGroup('s1', 'G', ['628111111@c.us', '628222222@c.us'])).rejects.toThrow();
+    expect(pacing.chargeGroupReachouts).not.toHaveBeenCalled();
   });
 
   it('passes participant lists straight through to the engine', async () => {

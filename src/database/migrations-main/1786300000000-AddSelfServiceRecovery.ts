@@ -28,9 +28,9 @@ export class AddSelfServiceRecovery1786300000000 implements MigrationInterface {
       `CREATE INDEX IF NOT EXISTS "IDX_api_keys_selfServiceEmail" ON "api_keys" ("selfServiceEmail")`,
     );
 
-    const requestColumns = (await queryRunner.query(
-      `PRAGMA table_info("api_key_self_service_requests")`,
-    )) as Array<{ name: string }>;
+    const requestColumns = (await queryRunner.query(`PRAGMA table_info("api_key_self_service_requests")`)) as Array<{
+      name: string;
+    }>;
     if (!requestColumns.some(c => c.name === 'purpose')) {
       await queryRunner.query(
         `ALTER TABLE "api_key_self_service_requests" ADD COLUMN "purpose" varchar(20) NOT NULL DEFAULT ('issue')`,

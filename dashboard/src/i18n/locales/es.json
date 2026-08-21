@@ -143,7 +143,8 @@
       "orLabel": "o",
       "post": "Publicar",
       "posted": "Estado publicado",
-      "postFailed": "No se pudo publicar el estado"
+      "postFailed": "No se pudo publicar el estado",
+      "imageFile": "Imagen de estado"
     },
     "channels": {
       "notSupported": "Los canales no son compatibles con el motor Baileys.",
@@ -158,9 +159,17 @@
       "markRead": "Error al marcar el chat como leído",
       "send": "Error al enviar el mensaje",
       "react": "Error al reaccionar al mensaje",
-      "delete": "Error al eliminar el mensaje"
+      "delete": "Error al eliminar el mensaje",
+      "fileTooLarge": "El archivo es demasiado grande (máx. 18 MB)"
     },
-    "loadMessagesError": "No se pudieron cargar los mensajes. Revisa los registros del servidor."
+    "loadMessagesError": "No se pudieron cargar los mensajes. Revisa los registros del servidor.",
+    "messageStatus": {
+      "pending": "Pendiente",
+      "sent": "Enviado",
+      "delivered": "Entregado",
+      "read": "Leído",
+      "failed": "Fallido"
+    }
   },
   "errorBoundary": {
     "title": "Algo salió mal",
@@ -458,7 +467,10 @@
         "isNot": "no es",
         "contains": "contiene",
         "equals": "es igual a"
-      }
+      },
+      "fieldLabel": "Campo de filtro",
+      "operatorLabel": "Operador de filtro",
+      "valueLabel": "Valor de filtro"
     },
     "columns": {
       "url": "URL",
@@ -576,7 +588,10 @@
     },
     "empty": {
       "title": "No se encontraron registros",
-      "description": "Los registros de auditoría aparecerán aquí cuando se realicen acciones"
+      "description": "Los registros de auditoría aparecerán aquí cuando se realicen acciones",
+      "filteredTitle": "Sin coincidencias en esta página",
+      "filteredDescription": "La búsqueda filtra solo la página actual. Bórrala, navega entre páginas o usa el filtro de severidad para acotar en el servidor.",
+      "filteredServerDescription": "Ningún registro coincide con estos filtros. Ajusta el filtro de severidad para ampliar la búsqueda."
     }
   },
   "messageTester": {
@@ -720,7 +735,8 @@
       "deleted": "Plantilla eliminada correctamente",
       "deleteFailed": "Error al eliminar la plantilla: {{message}}",
       "copied": "Nombre de plantilla copiado"
-    }
+    },
+    "sessionSelect": "Sesión"
   },
   "infrastructure": {
     "title": "Infraestructura",
@@ -882,6 +898,7 @@
     "installModal": {
       "title": "Instalar un plugin",
       "hint": "Sube un plugin empaquetado como un .zip (con un manifest.json). Se ejecuta en modo aislado una vez habilitado.",
+      "trustWarning": "Los plugins se ejecutan con todos los privilegios del proceso de la puerta de enlace: el modo aislado contiene fallos, no código malicioso. Instala solo plugins en los que confíes.",
       "choose": "Elige un archivo .zip…",
       "tooLarge": "El archivo supera el límite de 5 MB.",
       "catalogHint": "Instala directamente desde el catálogo de plugins de OpenWA. El .zip se obtiene en el servidor a través de la protección SSRF, luego se valida y se ejecuta en sandbox.",

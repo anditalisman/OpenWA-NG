@@ -3,6 +3,7 @@ import type * as BaileysLib from '@whiskeysockets/baileys';
 import type { AnyMessageContent, MiscMessageGenerationOptions, WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { generateSafeLinkPreview } from './safe-link-preview';
 import {
+  CallLinkType,
   CustomLinkPreview,
   ChatState,
   ContactCard,
@@ -13,6 +14,7 @@ import {
   MessageResult,
   PollInput,
   Product,
+  Quotable,
 } from '../interfaces/whatsapp-engine.interface';
 import { toEngineParticipants } from './baileys-groups';
 import { buildVCard } from './vcard';
@@ -147,7 +149,7 @@ export class BaileysMessaging {
     chatId: string,
     text: string,
     mentions?: string[],
-    sendOptions?: { linkPreview?: boolean; customPreview?: CustomLinkPreview },
+    sendOptions?: { linkPreview?: boolean; customPreview?: CustomLinkPreview } & Quotable,
   ): Promise<MessageResult> {
     this.host.ensureReady();
     const jid = await this.toDeliverableJid(chatId);
@@ -158,6 +160,9 @@ export class BaileysMessaging {
     const options = {
       ...(this.withEphemeral(jid) ?? {}),
       getUrlInfo: (text: string) => generateSafeLinkPreview(text),
+      // Merged rather than assigned: getUrlInfo above must survive, or the library's own vulnerable
+      // preview generator becomes reachable again on quoted sends only.
+      ...((await this.quoteOption(sendOptions?.quotedMessageId)) ?? {}),
     };
     // `linkPreview: null` is Baileys' explicit "no preview": with the key absent it instead calls the
     // configured generator (Utils/messages.js:279-281), which for us means a blocking outbound fetch
@@ -290,90 +295,163 @@ export class BaileysMessaging {
   async sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     this.host.ensureReady();
     const { data, mimetype } = await resolveMediaBuffer(media);
-    return this.sendContent(chatId, {
-      image: data,
-      caption: media.caption,
-      mimetype,
-      ...this.withMentions(media.mentions),
-    });
+    return this.sendContent(
+      chatId,
+      {
+        image: data,
+        caption: media.caption,
+        mimetype,
+        ...this.withMentions(media.mentions),
+      },
+      await this.quoteOption(media.quotedMessageId),
+    );
   }
 
   async sendVideoMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     this.host.ensureReady();
     const { data, mimetype } = await resolveMediaBuffer(media);
-    return this.sendContent(chatId, {
-      video: data,
-      caption: media.caption,
-      mimetype,
-      ...this.withMentions(media.mentions),
-    });
+    return this.sendContent(
+      chatId,
+      {
+        video: data,
+        caption: media.caption,
+        mimetype,
+        ...this.withMentions(media.mentions),
+      },
+      await this.quoteOption(media.quotedMessageId),
+    );
   }
 
   async sendAudioMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     this.host.ensureReady();
     const { data, mimetype } = await resolveMediaBuffer(media);
-    return this.sendContent(chatId, { audio: data, mimetype, ptt: media.ptt ?? false });
+    return this.sendContent(
+      chatId,
+      // Audio carries no caption, so a mention here tags the recipient through contextInfo without
+      // visible @text. It is still forwarded: the route accepts `mentions` (SendAudioMessageDto
+      // extends SendMediaMessageDto) and whatsapp-web.js sends it, so dropping it here made the same
+      // request notify participants on one engine and silently not on the other.
+      { audio: data, mimetype, ptt: media.ptt ?? false, ...this.withMentions(media.mentions) },
+      await this.quoteOption(media.quotedMessageId),
+    );
   }
 
   async sendDocumentMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     this.host.ensureReady();
     const { data, mimetype } = await resolveMediaBuffer(media);
-    return this.sendContent(chatId, {
-      document: data,
-      mimetype,
-      fileName: media.filename ?? 'file',
-      caption: media.caption,
-      ...this.withMentions(media.mentions),
-    });
+    return this.sendContent(
+      chatId,
+      {
+        document: data,
+        mimetype,
+        fileName: media.filename ?? 'file',
+        caption: media.caption,
+        ...this.withMentions(media.mentions),
+      },
+      await this.quoteOption(media.quotedMessageId),
+    );
+  }
+
+  async createCallLink(type: CallLinkType, startTime: number): Promise<string> {
+    this.host.ensureReady();
+    const lib = await this.host.loadLib();
+    // The socket resolves only the bare `token` attribute of the `link_create` node; the finished
+    // link is that token behind one of the library's two exported prefixes. Note the audio prefix
+    // WhatsApp itself uses is `/voice/`, which is also what whatsapp-web.js calls the same thing.
+    //
+    // timeoutMs is passed so the library can retire its own pending query, and the call is ALSO
+    // wrapped: baileys' query() swallows its timeout, so an unanswered request would otherwise
+    // resolve to nothing and be indistinguishable from a refusal.
+    const token = await this.confirmed(
+      this.sock().createCallLink(type, { startTime: Math.floor(startTime / 1000) }, this.queryBudgetMs),
+      'the call link',
+    );
+    if (!token) {
+      // A prefix with nothing after it is a dead link that looks like a real one — the caller would
+      // hand it to a user and only find out then.
+      throw new EngineRefusedError('WhatsApp did not return a call link');
+    }
+    return `${type === 'video' ? lib.CALL_VIDEO_PREFIX : lib.CALL_AUDIO_PREFIX}${token}`;
   }
 
   async sendStickerMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
     this.host.ensureReady();
     const { data, mimetype } = await resolveMediaBuffer(media);
-    return this.sendContent(chatId, { sticker: await toWebpSticker(data, mimetype) });
+    // A sticker has neither text nor caption, but stickerMessage carries a contextInfo like every
+    // other content type, so a mention still tags the participant. The route accepts the field
+    // (send-sticker shares SendMediaMessageDto) and docs/06 lists it among the media sends that
+    // take one, so dropping it here left a documented capability doing nothing.
+    return this.sendContent(
+      chatId,
+      { sticker: await toWebpSticker(data, mimetype), ...this.withMentions(media.mentions) },
+      await this.quoteOption(media.quotedMessageId),
+    );
   }
 
   async sendLocationMessage(chatId: string, location: LocationInput): Promise<MessageResult> {
     this.host.ensureReady();
-    return this.sendContent(chatId, {
-      location: {
-        degreesLatitude: location.latitude,
-        degreesLongitude: location.longitude,
-        name: location.description,
-        address: location.address,
+    return this.sendContent(
+      chatId,
+      {
+        location: {
+          degreesLatitude: location.latitude,
+          degreesLongitude: location.longitude,
+          name: location.description,
+          address: location.address,
+        },
       },
-    });
+      await this.quoteOption(location.quotedMessageId),
+    );
   }
 
   async sendContactMessage(chatId: string, contact: ContactCard): Promise<MessageResult> {
     this.host.ensureReady();
-    return this.sendContent(chatId, {
-      contacts: { displayName: contact.name, contacts: [{ vcard: buildVCard(contact) }] },
-    });
+    return this.sendContent(
+      chatId,
+      {
+        contacts: { displayName: contact.name, contacts: [{ vcard: buildVCard(contact) }] },
+      },
+      await this.quoteOption(contact.quotedMessageId),
+    );
   }
 
   async sendPollMessage(chatId: string, poll: PollInput): Promise<MessageResult> {
     this.host.ensureReady();
     // selectableCount 1 = single choice; 0 = no limit, which is how WhatsApp expresses
     // "allow multiple answers". Baileys generates the poll's messageSecret itself.
-    return this.sendContent(chatId, {
-      poll: {
-        name: poll.name,
-        values: poll.options,
-        selectableCount: poll.allowMultipleAnswers ? 0 : 1,
+    return this.sendContent(
+      chatId,
+      {
+        poll: {
+          name: poll.name,
+          values: poll.options,
+          selectableCount: poll.allowMultipleAnswers ? 0 : 1,
+        },
       },
-    });
+      await this.quoteOption(poll.quotedMessageId),
+    );
   }
 
-  async replyToMessage(chatId: string, quotedMsgId: string, text: string): Promise<MessageResult> {
+  async replyToMessage(chatId: string, quotedMsgId: string, text: string, mentions?: string[]): Promise<MessageResult> {
     this.host.ensureReady();
     const quoted = await this.requireStored(quotedMsgId);
-    return this.sendContent(chatId, { text }, { quoted });
+    // The one requireStored path that had no chat check. whatsapp-web.js resolves the quote by
+    // fetching from the named chat and 404s when the id is not in it, so the same request replied
+    // across conversations here and was refused there. The library encodes the foreign chat into
+    // contextInfo rather than rejecting it (Utils/messages.js), so the adapter is the only guard.
+    // NOT applied to quoteOption: cross-chat quoting on the send-* routes is deliberate and
+    // published in docs/06.
+    this.assertStoredInChat(quoted, chatId, quotedMsgId);
+    return this.sendContent(chatId, { text, ...this.withMentions(mentions) }, { quoted });
   }
 
   async forwardMessage(fromChatId: string, toChatId: string, messageId: string): Promise<MessageResult> {
     this.host.ensureReady();
     const forward = await this.requireStored(messageId);
+    // fromChatId was accepted and then ignored, so a message id from ANY chat forwarded successfully
+    // while whatsapp-web.js answered 404 for the same request (it fetches from the named chat and
+    // fails when the id is not in it). Same check the star and react paths already apply.
+    this.assertStoredInChat(forward, fromChatId, messageId);
     return this.sendContent(toChatId, { forward });
   }
 
@@ -410,7 +488,7 @@ export class BaileysMessaging {
     );
   }
 
-  async editMessage(chatId: string, messageId: string, body: string): Promise<MessageResult> {
+  async editMessage(chatId: string, messageId: string, body: string, mentions?: string[]): Promise<MessageResult> {
     this.host.ensureReady();
     const target = await this.requireStored(messageId);
     // Only the account's own messages are editable: WhatsApp refuses the edit of an inbound message
@@ -426,7 +504,17 @@ export class BaileysMessaging {
     // The destination is resolved like any other send: a lid-migrated contact rejects PN-addressed
     // sends with ack error 463 (see toDeliverableJid).
     const jid = await this.toDeliverableJid(chatId);
-    const sent = await this.sock().sendMessage(jid, { text: body, edit: target.key });
+    // Same guard as sendContent: an edit carries text, so without it the library would fetch
+    // every URL in the new body through its own vulnerable generator.
+    // Tags are applied to the inner message's contextInfo BEFORE the library wraps it in the
+    // protocolMessage edit envelope, so an edit can re-tag participants. An edit REPLACES the
+    // content, so omitting mentions drops whatever tags the original carried.
+    const editContent = { text: body, ...this.withMentions(mentions), edit: target.key };
+    const sent = await this.sock().sendMessage(
+      jid,
+      this.previewSafe(editContent),
+      this.previewSafeOptions(editContent),
+    );
     return { id: sent?.key?.id ?? messageId, timestamp: this.host.toUnixSeconds(sent?.messageTimestamp) };
   }
 
@@ -485,16 +573,42 @@ export class BaileysMessaging {
   }
 
   /** Send a Baileys content object and shape the result like the other sends. */
+  /**
+   * Keep the library's own preview generator unreachable, and keep it from firing at all.
+   *
+   * `generateWAMessageContent` calls the generator whenever the content carries `text` and no
+   * explicit `linkPreview` (Utils/messages.js), and the default generator delegates to
+   * `link-preview-js`, which carries an unfixed SSRF advisory. sendTextMessage guards both halves
+   * itself; every OTHER text-bearing send goes through here, and used to guard neither, so a reply
+   * or an edit containing a URL made the gateway fetch it through the vulnerable path.
+   *
+   * `linkPreview: null` is Baileys' explicit "no preview", which matches the documented engine
+   * default. A caller that set one already keeps it.
+   */
+  private previewSafe(content: AnyMessageContent): AnyMessageContent {
+    if (!('text' in content) || 'linkPreview' in content) return content;
+    return { ...content, linkPreview: null };
+  }
+
+  /**
+   * Options carrying the vetted generator, so the library's own is never selected. Added only for
+   * text-bearing content: media sends never reach the generator, and leaving their options untouched
+   * keeps the two-argument sendMessage call they already make.
+   */
+  private previewSafeOptions(content: AnyMessageContent, options?: MiscMessageGenerationOptions) {
+    if (!('text' in content)) return options;
+    return { ...(options ?? {}), getUrlInfo: (text: string) => generateSafeLinkPreview(text) };
+  }
+
   private async sendContent(
     chatId: string,
     content: AnyMessageContent,
     options?: MiscMessageGenerationOptions,
   ): Promise<MessageResult> {
     const jid = await this.toDeliverableJid(chatId);
-    const merged = this.withEphemeral(jid, options);
-    const sent = merged
-      ? await this.sock().sendMessage(jid, content, merged)
-      : await this.sock().sendMessage(jid, content);
+    const safe = this.previewSafe(content);
+    const merged = this.previewSafeOptions(safe, this.withEphemeral(jid, options));
+    const sent = merged ? await this.sock().sendMessage(jid, safe, merged) : await this.sock().sendMessage(jid, safe);
     if (sent) {
       void this.host.putStoredMessage(sent)?.catch(err =>
         this.host.logger.warn('Failed to persist sent message to store', {
@@ -533,6 +647,18 @@ export class BaileysMessaging {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  /**
+   * Turn an optional quoted-message id into Baileys' `quoted` send option.
+   *
+   * Baileys quotes by full stored message, never by id, so an id has to be resolved first — and an
+   * id we cannot resolve is a hard failure rather than a silent unquoted send: the caller asked for
+   * a reply, and a plain message delivered under that name is the wrong result reported as success.
+   */
+  private async quoteOption(quotedMessageId?: string): Promise<MiscMessageGenerationOptions | undefined> {
+    if (!quotedMessageId) return undefined;
+    return { quoted: await this.requireStored(quotedMessageId) };
   }
 
   /** Resolve a previously-seen message from the store, or throw a clear not-found error. */
