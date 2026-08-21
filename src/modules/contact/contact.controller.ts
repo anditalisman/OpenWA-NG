@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Post, Put, Delete, Param, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpException,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { ContactService } from './contact.service';
 import { RequireRole } from '../auth/decorators/auth.decorators';
@@ -13,6 +26,15 @@ import {
   ResolvedPhoneResponseDto,
 } from './dto/contact-response.dto';
 import { ENGINE_NOT_READY_409 } from '../../common/openapi/engine-status-responses';
+import { RecipientUnreachableError } from '../../common/errors/recipient-unreachable.error';
+
+/**
+ * A bare international-format number: digits only, no leading 0 (that's a national-format prefix,
+ * meaningless outside its own country and never valid E.164), 8-15 digits. Mirrors ContactService's
+ * `isBareNumber` allow-list, checked here too since this route accepts a raw number rather than a
+ * pre-built contact id.
+ */
+const BARE_INTERNATIONAL_NUMBER = /^[1-9]\d{7,14}$/;
 
 @ApiTags('contacts')
 @Controller('sessions/:sessionId/contacts')
@@ -107,11 +129,20 @@ export class ContactController {
       'reachable before you send to it.',
   })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
-  @ApiParam({ name: 'number', description: 'Phone number to check (e.g., 628123456789)' })
+  @ApiParam({
+    name: 'number',
+    description: 'Phone number to check, international format, e.g. 628123456789 (no leading 0, no +, no spaces)',
+  })
   @ApiResponse({
     status: 200,
     description: 'Number existence check result',
     type: NumberCheckResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "The number isn't in international format (e.g. a national-format number starting with 0), " +
+      'or whatsapp-web.js could not resolve it for a reason other than a dead session.',
   })
   @ApiResponse({
     status: 503,
@@ -122,9 +153,32 @@ export class ContactController {
   })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   async checkNumber(@Param('sessionId') sessionId: string, @Param('number') number: string) {
+    // Reject a national-format number (leading 0, e.g. Indonesian 08xx) before it ever reaches the
+    // engine: whatsapp-web.js's own id-construction code throws on it from inside the page context,
+    // with no status and a minified, unreadable message ("t: t") — surfacing as an opaque 500 with
+    // nothing to act on. Caught here instead, where the actual mistake (wrong format) is knowable.
+    if (!BARE_INTERNATIONAL_NUMBER.test(number.trim())) {
+      throw new BadRequestException(
+        `'${number}' is not a valid international-format phone number. Use digits only, country code ` +
+          'first and no leading 0 (e.g. 628123456789, not 08123456789 or +62 812-3456-789).',
+      );
+    }
+
     // The engine returns the canonical chat id in its native format; we don't build the JID here
     // (decoupled from the whatsapp-web.js `@c.us` scheme).
-    const whatsappId = await this.contactService.getNumberId(sessionId, number);
+    let whatsappId: string | null;
+    try {
+      whatsappId = await this.contactService.getNumberId(sessionId, number);
+    } catch (error) {
+      // Already-typed exceptions (EngineTransportError -> 503, EngineNotReadyError -> 409, this
+      // route's own 400 above, ...) carry a deliberate status; let them through as-is. Anything else
+      // is an unclassified whatsapp-web.js page-context failure for a well-formatted number — the
+      // same "couldn't resolve this recipient" fact RecipientUnreachableError already reports
+      // elsewhere (see wwebjs-messaging.ts), not a fresh failure mode this route needs its own story
+      // for.
+      if (error instanceof HttpException) throw error;
+      throw new RecipientUnreachableError(number);
+    }
     return {
       number,
       exists: whatsappId !== null,

@@ -1,5 +1,8 @@
 import { ContactController } from './contact.controller';
 import { ContactService } from './contact.service';
+import { RecipientUnreachableError } from '../../common/errors/recipient-unreachable.error';
+import { EngineTransportError } from '../../common/errors/engine-transport.error';
+import { BadRequestException } from '@nestjs/common';
 
 describe('ContactController', () => {
   const service = {
@@ -52,20 +55,44 @@ describe('ContactController', () => {
 
   it('checkNumber maps a null whatsappId to exists:false', async () => {
     service.getNumberId.mockResolvedValue(null);
-    await expect(controller.checkNumber('s1', '628123')).resolves.toEqual({
-      number: '628123',
+    await expect(controller.checkNumber('s1', '6281234567890')).resolves.toEqual({
+      number: '6281234567890',
       exists: false,
       whatsappId: null,
     });
   });
 
   it('checkNumber returns the canonical id when the number exists', async () => {
-    service.getNumberId.mockResolvedValue('628123@c.us');
-    await expect(controller.checkNumber('s1', '628123')).resolves.toEqual({
-      number: '628123',
+    service.getNumberId.mockResolvedValue('6281234567890@c.us');
+    await expect(controller.checkNumber('s1', '6281234567890')).resolves.toEqual({
+      number: '6281234567890',
       exists: true,
-      whatsappId: '628123@c.us',
+      whatsappId: '6281234567890@c.us',
     });
+  });
+
+  it('checkNumber rejects a national-format number (leading 0) with 400, without calling the engine', async () => {
+    await expect(controller.checkNumber('s1', '081234567890')).rejects.toThrow(BadRequestException);
+    expect(service.getNumberId).not.toHaveBeenCalled();
+  });
+
+  it('checkNumber rejects a non-numeric or too-short number with 400, without calling the engine', async () => {
+    await expect(controller.checkNumber('s1', '12345')).rejects.toThrow(BadRequestException);
+    await expect(controller.checkNumber('s1', '+62 812-3456-789')).rejects.toThrow(BadRequestException);
+    expect(service.getNumberId).not.toHaveBeenCalled();
+  });
+
+  it('checkNumber wraps an unclassified engine failure as RecipientUnreachableError (400), not a raw 500', async () => {
+    // The real-world trigger: whatsapp-web.js throws a minified, non-HttpException error from
+    // inside the page context (e.g. its own id-construction code choking on an edge case) — this
+    // used to reach the caller as an opaque 500 with nothing to act on.
+    service.getNumberId.mockRejectedValue(new Error('t: t'));
+    await expect(controller.checkNumber('s1', '6281234567890')).rejects.toThrow(RecipientUnreachableError);
+  });
+
+  it('checkNumber lets an already-typed engine exception through unchanged (e.g. 503 on a dead session)', async () => {
+    service.getNumberId.mockRejectedValue(new EngineTransportError('Transport died'));
+    await expect(controller.checkNumber('s1', '6281234567890')).rejects.toThrow(EngineTransportError);
   });
 
   it('getProfilePicture wraps the url', async () => {
