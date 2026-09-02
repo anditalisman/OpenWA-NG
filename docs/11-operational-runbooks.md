@@ -431,6 +431,10 @@ export BACKUP_DIR="/backups/openwa"
 curl -H "X-API-Key: $API_KEY" \
   http://localhost:2785/api/infra/export-data > "$BACKUP_DIR/export-data.json"
 
+# Started with docker-compose.dev.yml (the README Quick Start)? Add `-f docker-compose.dev.yml`
+# to every docker compose command in this runbook, the Rollback block included, and write `openwa`
+# wherever a command names the `openwa-api` service (steps 6 and 7, rollback step 2).
+
 # 4. Stop services
 docker compose down
 
@@ -455,8 +459,8 @@ docker compose up -d
 sleep 30
 curl http://localhost:2785/api/health
 
-# 10. Verify version
-curl http://localhost:2785/api/health | jq '.version'
+# 10. Verify version (`version` is only included for an authenticated request)
+curl -H "X-API-Key: $API_KEY" http://localhost:2785/api/health | jq '.version'
 
 # 11. Verify all sessions
 curl -H "X-API-Key: $API_KEY" \
@@ -476,8 +480,8 @@ curl -X POST http://localhost:2785/api/sessions/{sessionId}/messages/send-text \
 **Verification:**
 
 ```bash
-# Correct version
-curl http://localhost:2785/api/health | jq '.version'
+# Correct version (`version` is only included for an authenticated request)
+curl -H "X-API-Key: $API_KEY" http://localhost:2785/api/health | jq '.version'
 # Expected: "<new-version>"
 
 # All sessions reconnected

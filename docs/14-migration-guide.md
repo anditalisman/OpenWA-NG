@@ -681,6 +681,12 @@ chain by hand with `npm run migration:run:main`.
 # upgrade.sh — same shape for a patch or a minor
 set -e
 
+# Started with docker-compose.dev.yml (the README Quick Start)? Add `-f docker-compose.dev.yml` to
+# every docker compose command in this script, in the migration block right after it, and in 14.6
+# Rollback Procedures, and write `openwa` wherever a command names the `openwa-api` service. Do NOT
+# carry the flag up to the `--profile postgres` commands in 14.3: postgres exists only in the
+# production compose file.
+
 # 1. Backup: both databases + session auth + media + plugin state
 ./scripts/backup.sh
 
@@ -702,8 +708,8 @@ for i in {1..30}; do
   sleep 2
 done
 
-# 5. Confirm the running version
-curl -s http://localhost:2785/api/health | jq '.version'
+# 5. Confirm the running version (`version` is only included for an authenticated request)
+curl -s -H "X-API-Key: $API_KEY" http://localhost:2785/api/health | jq '.version'
 
 # 6. Verify sessions came back
 curl -s -H "X-API-Key: $API_KEY" \
@@ -776,6 +782,9 @@ if [ -z "$BACKUP_DIR" ] || [ -z "$TARGET_VERSION" ]; then
 fi
 
 echo "🔄 Rolling back to v${TARGET_VERSION}..."
+
+# Started with docker-compose.dev.yml (the README Quick Start)? Add `-f docker-compose.dev.yml` to
+# every docker compose command below, and write `openwa` wherever one names the `openwa-api` service.
 
 # 1. Stop current
 docker compose down

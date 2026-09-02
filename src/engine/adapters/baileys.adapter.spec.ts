@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as qrcode from 'qrcode';
 
 jest.mock('../../common/media/load-remote-media', () => ({
   loadRemoteMediaBuffer: jest.fn(),
@@ -19,6 +20,8 @@ class FakeSock extends EventEmitter {
   };
   public emitter = new EventEmitter();
   public user: { id: string; name?: string } | undefined;
+  // Baileys' WebSocketClient; the lifecycle reads isOpen after an await to detect a drop in between.
+  public ws = { isOpen: true };
   public requestPairingCode = jest.fn().mockResolvedValue('ABCD-EFGH');
   public end = jest.fn();
   public logout = jest.fn().mockResolvedValue(undefined);
@@ -84,6 +87,12 @@ class FakeSock extends EventEmitter {
 
 const fakeSock = new FakeSock();
 const saveCreds = jest.fn().mockResolvedValue(undefined);
+
+// Real rendering, wrapped so a test can await the exact promise the lifecycle is waiting on.
+jest.mock('qrcode', () => {
+  const actual = jest.requireActual<typeof import('qrcode')>('qrcode');
+  return { ...actual, toDataURL: jest.fn().mockImplementation(actual.toDataURL) };
+});
 
 jest.mock('@whiskeysockets/baileys', () => ({
   __esModule: true,
@@ -195,6 +204,7 @@ function firstEditedMessage(callback: jest.Mock): EditedMessage {
 describe('BaileysAdapter lifecycle & status', () => {
   beforeEach(() => {
     fakeSock.user = undefined;
+    fakeSock.ws.isOpen = true;
     fakeSock.resetEmitter(); // drop listeners from previous test's initialize()
     jest.clearAllMocks();
   });
@@ -569,11 +579,165 @@ describe('BaileysAdapter lifecycle & status', () => {
     await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
   });
 
-  it('requestPairingCode delegates to the socket', async () => {
+  // The socket object exists from the moment makeWASocket returns, but its WebSocket is still
+  // connecting: sending then makes Baileys throw a raw Boom 428 that surfaces as a 500.
+  it('requestPairingCode throws EngineNotReadyError while the socket is still connecting', async () => {
     const adapter = newAdapter();
     await adapter.initialize(noopCallbacks({}));
+    await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
+    expect(fakeSock.requestPairingCode).not.toHaveBeenCalled();
+  });
+
+  it('requestPairingCode delegates to the socket once a QR has been published', async () => {
+    let resolveQr!: () => void;
+    const qrPublished = new Promise<void>(resolve => {
+      resolveQr = resolve;
+    });
+    const onQRCode = jest.fn(() => resolveQr());
+    const adapter = newAdapter();
+    await adapter.initialize(noopCallbacks({ onQRCode }));
+    fakeSock.fire('connection.update', { qr: 'QR-STRING' });
+    await qrPublished;
+
     await expect(adapter.requestPairingCode('628999')).resolves.toBe('ABCD-EFGH');
     expect(fakeSock.requestPairingCode).toHaveBeenCalledWith('628999');
+  });
+
+  /** Initialize and fire a QR update, resolving once the lifecycle has published it (rendering is async). */
+  async function initializeAtQrReady(onQRCode: jest.Mock = jest.fn()): Promise<BaileysAdapter> {
+    let resolveQr!: () => void;
+    const qrPublished = new Promise<void>(resolve => {
+      resolveQr = resolve;
+    });
+    const adapter = newAdapter();
+    await adapter.initialize(
+      noopCallbacks({
+        onQRCode: (url: string) => {
+          onQRCode(url);
+          resolveQr();
+        },
+      }),
+    );
+    fakeSock.fire('connection.update', { qr: 'QR-STRING' });
+    await qrPublished;
+    expect(adapter.getStatus()).toBe(EngineStatus.QR_READY);
+    return adapter;
+  }
+
+  // Baileys emits its close update only after `await ws.close()` resolves, and ws parks a black-holed
+  // socket in CLOSING for its 30 s close timeout, so QR_READY outlives the usable connection. Sending in
+  // that window makes Baileys throw a raw Boom 428, which with no global exception filter surfaces as a
+  // 500 instead of the documented 409, after it has already written creds.me and emitted creds.update.
+  it('requestPairingCode rejects on a closing socket while the status still reads QR_READY', async () => {
+    const adapter = await initializeAtQrReady();
+    fakeSock.ws.isOpen = false; // ws.close() has run; the close event has not landed yet
+
+    // The status is genuinely still QR_READY, so the rejection can only come from the liveness check.
+    expect(adapter.getStatus()).toBe(EngineStatus.QR_READY);
+    await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
+    // Proves the library is never entered, so creds.me / creds.update / saveCreds never fire.
+    expect(fakeSock.requestPairingCode).not.toHaveBeenCalled();
+  });
+
+  // The cached QR belongs to the socket that produced it: once the socket closes nothing can accept that
+  // scan, so GET /qr must answer its documented 400 rather than 200 with a code that can never link.
+  it.each([
+    ['a transient close', 515, EngineStatus.INITIALIZING],
+    ['a terminal close', 403, EngineStatus.FAILED],
+  ])('drops the cached QR on %s', async (_label, statusCode, expected) => {
+    const adapter = await initializeAtQrReady();
+    expect(adapter.getQRCode()).not.toBeNull();
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      fakeSock.fire('connection.update', {
+        connection: 'close',
+        lastDisconnect: { error: { output: { statusCode } } },
+      });
+      expect(adapter.getStatus()).toBe(expected);
+      expect(adapter.getQRCode()).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('a drop after the QR was published moves the status off QR_READY, so requestPairingCode rejects again', async () => {
+    const adapter = await initializeAtQrReady();
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      fakeSock.fire('connection.update', {
+        connection: 'close',
+        lastDisconnect: { error: { output: { statusCode: 515 } } },
+      });
+      expect(adapter.getStatus()).toBe(EngineStatus.INITIALIZING);
+      await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
+      expect(fakeSock.requestPairingCode).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('discards a QR that finished rendering after the socket dropped', async () => {
+    const onQRCode = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize(noopCallbacks({ onQRCode }));
+    fakeSock.fire('connection.update', { qr: 'QR-STRING' });
+    // The drop lands while the render is in flight: Baileys closes its WebSocket before it emits.
+    fakeSock.ws.isOpen = false;
+    fakeSock.fire('connection.update', {
+      connection: 'close',
+      lastDisconnect: { error: { output: { statusCode: 515 } } },
+    });
+    // The lifecycle's continuation was queued on this promise before ours, so it has run by now.
+    await (qrcode.toDataURL as unknown as jest.Mock).mock.results[0].value;
+    expect(adapter.getStatus()).toBe(EngineStatus.INITIALIZING);
+    expect(adapter.getQRCode()).toBeNull();
+    expect(onQRCode).not.toHaveBeenCalled();
+    await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
+    await adapter.disconnect(); // clears the pending reconnect timer
+  });
+
+  it('moves to AUTHENTICATING and drops the QR once WhatsApp accepts the link, so a repeat pairing request rejects', async () => {
+    const onQRCode = jest.fn();
+    const adapter = await initializeAtQrReady(onQRCode);
+    fakeSock.fire('connection.update', { isNewLogin: true, qr: undefined });
+    expect(adapter.getStatus()).toBe(EngineStatus.AUTHENTICATING);
+    expect(adapter.getQRCode()).toBeNull();
+    await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
+    expect(fakeSock.requestPairingCode).not.toHaveBeenCalled();
+
+    // Baileys keeps rotating the QR until the socket ends; a refresh must not reopen the guard.
+    fakeSock.fire('connection.update', { qr: 'QR-REFRESH' });
+    expect(qrcode.toDataURL).toHaveBeenCalledTimes(1);
+    expect(adapter.getStatus()).toBe(EngineStatus.AUTHENTICATING);
+    expect(onQRCode).toHaveBeenCalledTimes(1);
+
+    // WhatsApp then asks for a restart (515): INITIALIZING across the reconnect, READY on open.
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    try {
+      fakeSock.fire('connection.update', {
+        connection: 'close',
+        lastDisconnect: { error: { output: { statusCode: 515 } } },
+      });
+      expect(adapter.getStatus()).toBe(EngineStatus.INITIALIZING);
+    } finally {
+      jest.useRealTimers();
+    }
+    fakeSock.user = { id: '628999:12@s.whatsapp.net', name: 'Me' };
+    fakeSock.fire('connection.update', { connection: 'open' });
+    expect(adapter.getStatus()).toBe(EngineStatus.READY);
+  });
+
+  it('discards a QR whose render finished after WhatsApp accepted the link', async () => {
+    const onQRCode = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize(noopCallbacks({ onQRCode }));
+    fakeSock.fire('connection.update', { qr: 'QR-STRING' });
+    fakeSock.fire('connection.update', { isNewLogin: true, qr: undefined });
+    await (qrcode.toDataURL as unknown as jest.Mock).mock.results[0].value;
+    expect(adapter.getStatus()).toBe(EngineStatus.AUTHENTICATING);
+    expect(adapter.getQRCode()).toBeNull();
+    expect(onQRCode).not.toHaveBeenCalled();
+    await expect(adapter.requestPairingCode('628999')).rejects.toBeInstanceOf(EngineNotReadyError);
   });
 
   it('persists creds: subscribes saveCreds to creds.update', async () => {
@@ -2368,7 +2532,7 @@ describe('BaileysAdapter inbound fan-out', () => {
     expect(event.senderId).toBe('628111@c.us'); // canonicalized to the neutral dialect
   });
 
-  it('media download failure: logs the error and emits the message without media (no throw)', async () => {
+  it('media download failure: logs the error and emits the omitted marker (no throw)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
     const baileys = jest.requireMock('@whiskeysockets/baileys') as {
       getContentType: jest.Mock;
@@ -2376,26 +2540,38 @@ describe('BaileysAdapter inbound fan-out', () => {
     };
     baileys.getContentType.mockReturnValue('imageMessage');
     baileys.downloadMediaMessage.mockRejectedValue(new Error('download failed'));
+    // The skip exit builds a marker identical to the one this asserts, so an ambient 'false' would
+    // otherwise let the test pass having never reached the download at all.
+    const prev = process.env.MEDIA_DOWNLOAD_ENABLED;
+    process.env.MEDIA_DOWNLOAD_ENABLED = 'true';
 
-    const onMessage = jest.fn();
-    const adapter = newAdapter();
-    await adapter.initialize({ onMessage });
-    fakeSock.fire('messages.upsert', {
-      type: 'notify',
-      messages: [
-        {
-          key: { remoteJid: '628111@s.whatsapp.net', fromMe: false, id: 'IMGFAIL' },
-          message: { imageMessage: { mimetype: 'image/jpeg', caption: 'broken' } },
-          messageTimestamp: 1700000025,
-        },
-      ],
-    });
-    await new Promise(r => setImmediate(r));
-    // message is still emitted, just without media
-    expect(onMessage).toHaveBeenCalledTimes(1);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const msg = onMessage.mock.calls[0][0] as { media?: unknown };
-    expect(msg.media).toBeUndefined();
+    try {
+      const onMessage = jest.fn();
+      const adapter = newAdapter();
+      await adapter.initialize({ onMessage });
+      fakeSock.fire('messages.upsert', {
+        type: 'notify',
+        messages: [
+          {
+            key: { remoteJid: '628111@s.whatsapp.net', fromMe: false, id: 'IMGFAIL' },
+            message: { imageMessage: { mimetype: 'image/jpeg', caption: 'broken', fileLength: 4096 } },
+            messageTimestamp: 1700000025,
+          },
+        ],
+      });
+      await new Promise(r => setImmediate(r));
+      // The message is still emitted, and it still says it carried an image. sizeBytes is the DECLARED
+      // size: nothing was downloaded, so reporting the cap (as the streaming abort does) would lie.
+      expect(onMessage).toHaveBeenCalledTimes(1);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const msg = onMessage.mock.calls[0][0] as { media?: unknown; body?: string };
+      expect(msg.media).toEqual({ mimetype: 'image/jpeg', omitted: true, sizeBytes: 4096 });
+      expect(msg.body).toBe('broken');
+      expect(baileys.downloadMediaMessage).toHaveBeenCalled();
+    } finally {
+      if (prev === undefined) delete process.env.MEDIA_DOWNLOAD_ENABLED;
+      else process.env.MEDIA_DOWNLOAD_ENABLED = prev;
+    }
   });
 });
 

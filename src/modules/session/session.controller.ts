@@ -18,6 +18,8 @@ import {
   CreateSessionDto,
   SessionConfigResponseDto,
   UpdateSessionConfigDto,
+  SessionProxyResponseDto,
+  UpdateSessionProxyDto,
   SessionResponseDto,
   QRCodeResponseDto,
   MarkChatReadDto,
@@ -43,7 +45,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/entities/audit-log.entity';
 import { RequireRole, CurrentApiKey, SessionScoped, RequireUnscopedKey } from '../auth/decorators/auth.decorators';
 import { ApiKey, ApiKeyRole } from '../auth/entities/api-key.entity';
-import { ENGINE_NOT_READY_409 } from '../../common/openapi/engine-status-responses';
+import { ENGINE_NOT_READY_409, PAIRING_NOT_READY_409 } from '../../common/openapi/engine-status-responses';
 
 @ApiTags('sessions')
 @Controller('sessions')
@@ -165,6 +167,52 @@ export class SessionController {
       metadata: { ...config },
     });
     return config;
+  }
+
+  @Get(':sessionId/proxy')
+  @ApiOperation({ summary: 'Get the per-session egress proxy configuration (credentials masked)' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Effective proxy configuration',
+    type: SessionProxyResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  async getProxy(@Param('sessionId', ParseUUIDPipe) id: string): Promise<SessionProxyResponseDto> {
+    return this.sessionService.getProxy(id);
+  }
+
+  @Patch(':sessionId/proxy')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  // Routing a session's whole egress through an attacker-chosen host is an instance-level decision,
+  // not a per-session one. Before this route existed, `proxyUrl` could only be set through POST
+  // /sessions, which is unscoped by the fence above, so a key restricted to specific sessions could
+  // never configure a proxy. Keep that reachability rather than widening it as a side effect.
+  @RequireUnscopedKey()
+  @ApiOperation({
+    summary: 'Update the per-session egress proxy configuration',
+    description:
+      'Sets or clears the proxy URL. Credentials in `proxyUrl` are stored but never returned by GET. ' +
+      'No restart is performed — changes apply on the next session start.',
+  })
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Updated proxy configuration',
+    type: SessionProxyResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid proxyUrl' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  async updateProxy(
+    @Param('sessionId', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSessionProxyDto,
+  ): Promise<SessionProxyResponseDto> {
+    const proxy = await this.sessionService.updateProxy(id, dto);
+    await this.auditService.logInfo(AuditAction.SESSION_CONFIG_UPDATED, {
+      sessionId: id,
+      metadata: { proxyEnabled: proxy.enabled, proxyType: proxy.proxyType, proxyHost: proxy.proxyHost },
+    });
+    return proxy;
   }
 
   @Delete(':sessionId')
@@ -361,7 +409,6 @@ export class SessionController {
     description: 'QR code not ready or session already authenticated',
   })
   @ApiResponse({ status: 404, description: 'Session not found' })
-  @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
   async getQRCode(@Param('sessionId', ParseUUIDPipe) id: string): Promise<QRCodeResponseDto> {
     const qrCode = await this.sessionService.getQRCode(id);
     await this.auditService.logInfo(AuditAction.SESSION_QR_GENERATED, {
@@ -377,7 +424,7 @@ export class SessionController {
   @ApiResponse({ status: 201, description: 'Pairing code generated', type: PairingCodeResponseDto })
   @ApiResponse({ status: 400, description: 'Session not started or already authenticated' })
   @ApiResponse({ status: 404, description: 'Session not found' })
-  @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
+  @ApiResponse({ status: 409, description: PAIRING_NOT_READY_409 })
   async requestPairingCode(
     @Param('sessionId', ParseUUIDPipe) id: string,
     @Body() dto: RequestPairingCodeDto,

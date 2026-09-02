@@ -33,6 +33,20 @@ export interface SessionConfig {
   reconnectBaseDelay: number;
 }
 
+export type SessionProxyType = 'http' | 'https' | 'socks4' | 'socks5';
+
+export interface SessionProxy {
+  enabled: boolean;
+  proxyType: SessionProxyType | null;
+  proxyHost: string | null;
+  hasCredentials: boolean;
+}
+
+export interface CreateSessionOptions {
+  proxyUrl?: string;
+  proxyType?: SessionProxyType;
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -755,16 +769,25 @@ async function requestBlob(endpoint: string): Promise<Blob> {
 export const sessionApi = {
   list: () => request<Session[]>('/sessions'),
   get: (id: string) => request<Session>(`/sessions/${id}`),
-  create: (name: string) =>
+  create: (name: string, options?: CreateSessionOptions) =>
     request<Session>('/sessions', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({
+        name,
+        ...(options?.proxyUrl ? { proxyUrl: options.proxyUrl } : {}),
+      }),
     }),
   delete: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
   getConfig: (id: string) => request<SessionConfig>(`/sessions/${id}/config`),
   // PATCH merges: only the keys sent are touched. Send null to clear one back to its default.
   updateConfig: (id: string, patch: Partial<Record<keyof SessionConfig, boolean | number | null>>) =>
     request<SessionConfig>(`/sessions/${id}/config`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    }),
+  getProxy: (id: string) => request<SessionProxy>(`/sessions/${id}/proxy`),
+  updateProxy: (id: string, patch: { proxyUrl?: string | null }) =>
+    request<SessionProxy>(`/sessions/${id}/proxy`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
     }),
@@ -941,6 +964,7 @@ export const apiKeyApi = {
       body: JSON.stringify(data),
     }),
   update: (id: string, data: { name?: string; role?: ApiKey['role']; allowedSessions?: string[]; allowedIps?: string[] }) =>
+
     request<ApiKey>(`/auth/api-keys/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
