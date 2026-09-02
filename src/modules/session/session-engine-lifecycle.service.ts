@@ -41,9 +41,8 @@ const isStatusSeedOnReadyEnabled = (): boolean => process.env.STATUS_SEED_ON_REA
 
 // Message types that carry downloadable media. Any persisted row of these types must have a media
 // marker in metadata — never NULL — or the dashboard renders an empty bubble (no placeholder) and the
-// by-type stats filter skips the row. Sources that arrive without a media field (media-free history
-// sync, a wwjs own-send echo whose download failed) get the omitted marker synthesized at the
-// persistence chokepoints.
+// by-type stats filter skips the row. Sources that arrive without a media field (the media-free
+// history sync) get the omitted marker synthesized at the persistence chokepoints.
 
 export interface ReconnectState extends ReconnectAttemptState {
   /** The pending attempt's timer. Lives here, not in the policy, which stays free of side effects. */
@@ -518,11 +517,13 @@ export class SessionEngineLifecycle {
    * gateway always has one and this fence is live single-node too.
    *
    * SCOPE, stated plainly so the guarantee is not read wider than it is. Fenced: the three status
-   * writes in the event wiring, the exhausted-reconnect FAILED, and the start-path FAILED in
-   * controls. NOT fenced: handleEngineReady's direct row write and handleEngineDisconnected's
-   * DISCONNECTED — both statuses are in the boot reset's activeStatuses AND in TAKEOVER_STATUSES,
-   * so a wrong one self-heals, unlike FAILED. The gate is also a point-in-time read: `owned` can
-   * change while the awaited write is in flight, so this narrows the window rather than closing it.
+   * writes in the event wiring, the exhausted-reconnect FAILED, the start-path FAILED in controls,
+   * and the terminal-unlink phone clear in handleEngineDisconnected (like FAILED, a wrongly nulled
+   * phone does not self-heal until the owner's next READY). NOT fenced: handleEngineReady's direct
+   * row write and handleEngineDisconnected's DISCONNECTED — both statuses are in the boot reset's
+   * activeStatuses AND in TAKEOVER_STATUSES, so a wrong one self-heals, unlike FAILED. The gate is
+   * also a point-in-time read: `owned` can change while the awaited write is in flight, so this
+   * narrows the window rather than closing it.
    */
   private ownsSession(id: string): boolean {
     return nodeOwnsSession(this.ownership, id);
@@ -597,7 +598,9 @@ export class SessionEngineLifecycle {
     // order, and the synchronous one-shot stuck-auth claim are preserved there, reaching the
     // lifecycle's live methods/state through the wiringHost built in the constructor.
     // `session.name` is handed over as the immutable snapshot onCredentialTeardownStarted keys on.
-    const initPromise = engine.initialize(this.eventWiring.buildCallbacks(id, engine, session.name, this.wiringHost));
+    const initPromise = engine.initialize(
+      this.eventWiring.buildCallbacks(id, engine, session.name, this.wiringHost, Boolean(session.phone)),
+    );
 
     // engine.initialize() launches Chromium and navigates to WhatsApp Web with no internal timeout:
     // whatsapp-web.js calls page.goto(..., { timeout: 0 }) and its web-version-cache fetch has none
@@ -835,6 +838,23 @@ export class SessionEngineLifecycle {
         metadata: { reason },
         errorMessage: `WhatsApp unlinked this device (${reason}); the session must be re-paired with a fresh QR`,
       });
+      // The unlink is terminal: reconnecting can only land on a QR, so the next boot must not
+      // resurrect the session (auto-start and the takeover sweep both key on a non-null phone),
+      // exactly what logout() already ensures for operator-driven unlinks. The reconnect scheduled
+      // below still runs and shows one QR now; `session` was captured above, so its previouslyLinked
+      // flag is unaffected by this row write. onReady rewrites phone on the next successful link.
+      // Fenced on ownership, unlike the DISCONNECTED write below: a wrongly nulled phone does not
+      // self-heal until the owner's next READY, the same reason the exhausted-reconnect FAILED write
+      // is fenced. Fire-and-forget: no await may sit between the identity fences above and below.
+      if (this.ownsSession(id)) {
+        void this.sessionRepository.update(id, { phone: null }).catch((err: unknown) =>
+          this.logger.warn('Failed to clear phone after a terminal unlink', {
+            sessionId: id,
+            error: String(err),
+            action: 'unlink_phone_clear_failed',
+          }),
+        );
+      }
     }
 
     void this.webhookService.dispatch(id, 'session.disconnected', { sessionId: id, reason });

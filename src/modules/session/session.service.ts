@@ -16,7 +16,14 @@ import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity
 import { setTimeout } from 'node:timers/promises';
 import { EngineTransportError } from '../../common/errors/engine-transport.error';
 import { Session, SessionStatus } from './entities/session.entity';
-import { CreateSessionDto, SessionConfigResponseDto, UpdateSessionConfigDto } from './dto';
+import {
+  CreateSessionDto,
+  SessionConfigResponseDto,
+  UpdateSessionConfigDto,
+  SessionProxyResponseDto,
+  UpdateSessionProxyDto,
+  projectSessionProxy,
+} from './dto';
 import { EngineRegistry } from '../../engine/engine-registry.service';
 import { SessionLivenessWatchdog } from './session-liveness-watchdog.service';
 import { SessionErrorStore } from './session-error-store.service';
@@ -30,6 +37,9 @@ import { resolveFeatureFlags } from '../../config/feature-flags';
 import { IWhatsAppEngine, ChatSummary, ChatState } from '../../engine/interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
 import { HookManager } from '../../core/hooks';
+// Type-only: the module binds this class to PLUGIN_SESSION_PORT with a `useExisting` alias, which
+// TypeScript does not check, so `implements` is what keeps the two in step.
+import type { PluginSessionPort } from '../../core/plugins/plugin-host-ports';
 
 /** Stagger before the single transient-launch retry; short - the claim is held while it waits. */
 const SESSION_START_RETRY_DELAY_MS = 2_000;
@@ -78,7 +88,7 @@ export const AUTOSTART_THROTTLE_MS = 2_000;
  * its public surface toward the controller and the feature modules is unchanged by the split.
  */
 @Injectable()
-export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicationBootstrap {
+export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicationBootstrap, PluginSessionPort {
   private readonly logger = createLogger('SessionService');
 
   // Live engine instances, owned by the shared EngineRegistry (the narrow port feature modules
@@ -315,8 +325,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       return [];
     }
     const { limit, offset } = resolveListWindow(opts.limit, opts.offset);
-    const options: FindManyOptions<Session> = { order: { createdAt: 'DESC' }, take: limit, skip: offset };
-    if (allowedSessions != null) {
+    // `id` tiebreaks the second-resolution `createdAt` so a paged walk has a total order.
+    const options: FindManyOptions<Session> = {
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: limit,
+      skip: offset,
+    };
+    if (allowedSessions && allowedSessions.length > 0) {
       options.where = { id: In(allowedSessions) };
     }
     const sessions = await this.sessionRepository.find(options);
@@ -394,6 +409,31 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     // write the whole row back from a snapshot taken before this await.
     await this.sessionRepository.update(id, { config: config as QueryDeepPartialEntity<Record<string, unknown>> });
     return this.projectConfig(config);
+  }
+
+  async getProxy(id: string): Promise<SessionProxyResponseDto> {
+    const session = await this.findOne(id);
+    return projectSessionProxy(session);
+  }
+
+  /**
+   * Persist per-session proxy settings. No engine restart — proxy is read at initializeEngine() on
+   * the next start(), matching the reconnect settings on PATCH /config.
+   */
+  async updateProxy(id: string, dto: UpdateSessionProxyDto): Promise<SessionProxyResponseDto> {
+    const session = await this.findOne(id);
+
+    if (dto.proxyUrl === null) {
+      await this.sessionRepository.update(id, { proxyUrl: null, proxyType: null });
+      return projectSessionProxy({ proxyUrl: null });
+    }
+
+    if (dto.proxyUrl !== undefined) {
+      await this.sessionRepository.update(id, { proxyUrl: dto.proxyUrl, proxyType: null });
+      return projectSessionProxy({ proxyUrl: dto.proxyUrl });
+    }
+
+    return projectSessionProxy(session);
   }
 
   /** Record removal + engine retirement + credential purge: owned by the lifecycle service. */

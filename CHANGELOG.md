@@ -7,6 +7,160 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /sessions/{sessionId}/messages` accepts `inlineMedia=false`, which omits every inline media
+  payload and leaves each row's `{ omitted, sizeBytes }` marker plus the media endpoint. The budget
+  bounds one response, so a paged walk pulls up to 8 MiB of base64 per page; a client reading many
+  pages can now ask for the rows without the bytes
+  ([#1516](https://github.com/rmyndharis/OpenWA/issues/1516)).
+- `GET /sessions/{sessionId}/messages` accepts `after`, a keyset cursor holding the `id` of the last
+  message of the previous page. It anchors the window to a row instead of a count, so a message
+  arriving mid-walk can no longer shift it and make a page repeat or skip rows. `offset` keeps
+  working unchanged; an `after` that names no row in the session gives `400`
+  ([#1479](https://github.com/rmyndharis/OpenWA/issues/1479)).
+- Each engine now names the install-time patches its library is missing as it starts, rather than
+  only the message-id backport. A source install applies them with `--best-effort`, so a patch that
+  could not apply left one line in the `npm install` transcript and nothing afterwards; the
+  capability it repairs then failed with an error that named no cause. Diagnostic only, startup
+  continues. See docs/12 for the procedure.
+- The dashboard's API Keys page can limit an operator or viewer key to chosen sessions, on creation
+  and on a key that already exists. Leaving the picker empty keeps access to every session, including
+  ones created later, and the keys table shows each key's scope. `allowedSessions` was already
+  accepted by the REST API; this is the UI for it. Thanks @sebathi.
+- `PUPPETEER_PROTOCOL_TIMEOUT_MS` raises the per-browser-command budget on the whatsapp-web.js
+  engine, for large accounts whose reads fail with `Runtime.callFunctionOn timed out`. Unset keeps
+  Puppeteer's own budget, so nothing changes for a deployment that does not set it. The gateway
+  refuses to boot on `0` or on a value above 2147483647; see docs/12 for when to reach for it.
+  Thanks @JuanGalzerano.
+- `GET` and `PATCH /api/sessions/{sessionId}/proxy` read and update a session's egress proxy;
+  credentials are never returned, and changes apply on the next session start
+  ([#1474](https://github.com/rmyndharis/OpenWA/issues/1474)). Thanks @vitusan.
+- Sessions dashboard: set a proxy when creating a session, and view, change or clear it afterwards.
+  Thanks @vitusan.
+
+### Changed
+
+- A whatsapp-web.js protocol timeout is no longer eligible to be classified as a dead page.
+  Behaviour is unchanged on the current Puppeteer; the guard keeps a future bump from reporting a
+  slow command as a transport death.
+- `GET /sessions/{sessionId}/contacts` declares `503` in the contract and answers it when the
+  whatsapp-web.js page dies mid-read, instead of a bare `500`. Thanks @Deyvis17GY.
+- All five clients now document the 16-character minimum on a webhook `secret`, and that an empty
+  string clears it on update. The constraint is unchanged; until now only the gateway named it, in a
+  `400`.
+
+### Fixed
+
+- Paged lists now tiebreak on `id`, so a walk returns every row exactly once. Neither `createdAt` nor
+  a search relevance score is unique, and on PostgreSQL two identical statements could sort one tie
+  group differently, silently repeating some rows and omitting others: a 5000-row message list lost
+  23 rows per walk, and an ordinary search repeated a row by the third page. Affects the message,
+  session, webhook and webhook delivery-failure lists and `GET /search`. `offset` still addresses a
+  position by count, so a list taking concurrent writes can still shift under a walk.
+
+- `PUT /sessions/{sessionId}/groups/{groupId}/description` no longer fails with a bare `500` on
+  whatsapp-web.js. `WAWebGroupModifyInfoJob.setGroupDescription` now takes a single options object
+  and the library still calls it positionally, so `widToGroupJid` threw inside the page. A new
+  install-time patch (🔧⁹, docs/29) sends the options object; an empty description still clears.
+  `setGroupSubject` was never affected and Baileys is unchanged. Thanks @purnamcommunity.
+- whatsapp-web.js contact reads resolve the renamed `$1` serialized-id field, so contacts keep their
+  `id` on a WhatsApp Web build that renamed it; an entry with no readable id is skipped and counted
+  in the log. Thanks @Deyvis17GY.
+- Inbound media whose download fails now keeps the `media` envelope with `omitted: true` and the declared
+  size, on both engines, instead of dropping the field and looking like a message that never had media.
+- Webhook filters and automation rules gated on `hasMedia` now match those messages.
+- Baileys logs a failed inbound media download at `warn` instead of `debug`, so it is visible by default.
+- The webhook `secret` example in Swagger and the API reference was shorter than the 16-character floor
+  the route enforces, so pasting it back answered `400`. The example now passes, and both webhook routes
+  publish the length rule they enforce ([#1491](https://github.com/rmyndharis/OpenWA/issues/1491)).
+  Thanks @onepay-ye.
+- `STORAGE_TYPE=s3` missing `S3_ACCESS_KEY_ID` or `S3_SECRET_ACCESS_KEY` now warns at startup and names
+  the one that is unset, instead of silently writing every file to local disk and leaving the bucket
+  empty. Thanks @onepay-ye.
+
+### Dependencies
+
+- `browserslist` 4.28.2 to 4.28.8 in both dependency trees, closing two high-severity advisories
+  (unbounded cache growth, and a crash on untrusted custom stats). Dev-only and transitive in each,
+  so nothing that ships changes.
+
+## [0.23.3] - 2026-08-24
+
+### Added
+
+- A previously linked session that comes back asking for a QR now logs a warning (`relink_required`) naming the
+  likely causes, since an unlink that happened while the engine was down can leave no other trace.
+
+### Changed
+
+- `GET /search` declares the plugin provider's failure answers in the contract: `502` for an invalid result
+  shape and `503` when the provider does not answer; the built-in provider never returns either.
+- `POST /sessions/{sessionId}/pairing-code`: the 409 description in the OpenAPI contract and API reference
+  now says to wait for `qr_ready`, not `ready`, which on this route means the session is already linked, and
+  to wait for `ready` once a code was accepted.
+- `GET /sessions/{sessionId}/qr` no longer declares the engine-not-ready 409: the route reads the engine's
+  cached QR and never answers one. Its 400 already covers the not-ready case.
+
+### Fixed
+
+- Session auto-start no longer runs twice at boot. The plugin port for `SessionService` was a factory returning
+  the same instance, which made Nest dispatch its lifecycle hooks twice: two auto-start loops raced, each
+  session logged `Auto-start failed` with `Session is already starting`, and the 2 s launch stagger was lost.
+- Baileys: requesting a pairing code before the session reaches `qr_ready` answers the documented 409 instead
+  of a 500 with a `Connection Closed` stack trace, the same guard the whatsapp-web.js engine already carried.
+  Thanks @m7fz7.
+- Baileys: once WhatsApp accepts a QR scan or pairing code the session leaves `qr_ready` (`authenticating`,
+  then `initializing` across the restart WhatsApp requests) and ignores the QR refreshes Baileys keeps
+  emitting until then, so a repeat pairing request answers 409 instead of overwriting the linked identity.
+- Baileys: a QR that finishes rendering after its socket dropped is discarded instead of marking the session
+  `qr_ready`.
+- A WhatsApp-initiated unlink now clears the session's `phone` the way an operator logout does, so a restart
+  no longer relaunches the unlinked session into a QR nobody asked for; the next successful link sets it
+  again.
+- Baileys: a pairing request on a socket that has already begun closing answers the documented 409 instead of
+  a 500, and no longer writes a half-registered identity into the session's stored credentials.
+- Both engines drop the cached QR as soon as its socket or page dies, so `GET /sessions/{sessionId}/qr`
+  answers its documented 400 instead of 200 with a code that can no longer be scanned.
+
+### Documentation
+
+- The upgrade runbook and the migration guide state the `docker-compose.dev.yml` caveat before the first
+  `docker compose` command instead of after it, and name the `openwa` service substitution it needs.
+- `GET /api/health` is documented consistently as withholding `version` from unauthenticated callers.
+
+### Dependencies
+
+- `@bull-board/{api,express,nestjs}` 8.6.1 to 9.3.2 (major), plus a minor/patch group (NestJS 11.2.1,
+  BullMQ 6.2.0, AWS SDK) and a dashboard group (Vite 8.2.2, i18next 26.4.0, lucide-react 1.33).
+
+### Upgrade notes (behavior changes)
+
+- The queue dashboard's obliterate action gained a **force** option in Bull Board 9. Forcing it deletes
+  active jobs as well as queued ones, so those deliveries never reach a final attempt and no
+  `webhook_delivery_failures` row is written for them. Bull Board 8 refused outright while jobs were
+  active. The route stays ADMIN-only behind `BullBoardAuthMiddleware`.
+
+## [0.23.2] - 2026-08-23
+
+### Fixed
+
+- Baileys: an inbound shared contact card's vCard now populates the message `body` instead of being silently
+  dropped, matching what whatsapp-web.js returns for its `vcard` type. Several contacts shared
+  together (`contactsArrayMessage`) are newline-joined into one multi-vCard body, in the order they were
+  shared. Thanks @memarius.
+- The message-type filter on webhooks and automation rules accepts `poll`. The dashboard offered the option but
+  saving was refused as invalid.
+- Baileys: inbound poll questions, shared event names and business button-reply selections now fill the message
+  `body` instead of arriving empty. Webhook filters, search and the dashboard see this text on both engines now.
+- Baileys: quoting a contact card or poll keeps its text in the quoted-message preview instead of an empty
+  string; the quote reuses the same body extraction as the live message.
+- `docker compose up -d` builds from a Windows clone again. Git's default `core.autocrlf=true` gave the committed
+  PGDG signing key CRLF endings and the build failed with `NO_PUBKEY 7FCC7D46ACCC4CF8`. The key is now pinned to LF
+  and the build strips CR, so a clone already on disk needs no re-clone. Thanks @ATZ-Jordan.
+
+## [0.23.1] - 2026-08-21
+
 ### Fixed
 
 - The dashboard chat room shrinks within its layout instead of overflowing it, so a long contact or group name no longer pushes the send button out of reach. Thanks @rainerigius.

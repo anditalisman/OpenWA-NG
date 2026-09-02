@@ -132,7 +132,7 @@ export interface IncomingMessage {
     mimetype: string;
     filename?: string;
     data?: string; // base64; absent when the payload was omitted (see `omitted`)
-    /** True when the media blob was dropped due to a size cap, timeout, or concurrency saturation. */
+    /** True when the media blob was dropped: a size cap, a timeout, a disabled download, or a failed one. */
     omitted?: boolean;
     /** Decoded byte size of the media; always set when `omitted` is true. */
     sizeBytes?: number;
@@ -865,7 +865,10 @@ export interface SessionLifecycleCapability {
 
   getQRCode(): string | null;
 
-  /** Request an 8-char pairing code to link via phone number instead of scanning the QR. */
+  /**
+   * Request an 8-char pairing code to link via phone number instead of scanning the QR. Only valid while
+   * the engine is QR_READY; both adapters throw EngineNotReadyError (409) in any other status.
+   */
   requestPairingCode(phoneNumber: string): Promise<string>;
 
   getPhoneNumber(): string | null;
