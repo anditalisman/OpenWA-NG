@@ -963,8 +963,10 @@ export const apiKeyApi = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: { name?: string; role?: ApiKey['role']; allowedSessions?: string[]; allowedIps?: string[] }) =>
-
+  update: (
+    id: string,
+    data: { name?: string; role?: ApiKey['role']; allowedSessions?: string[]; allowedIps?: string[] },
+  ) =>
     request<ApiKey>(`/auth/api-keys/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -976,6 +978,47 @@ export const apiKeyApi = {
 // =============================================================================
 // Self-service API key requests — fully unauthenticated (no X-API-Key exists yet)
 // =============================================================================
+
+// Dashboard email + password sign-in. login() is deliberately NOT built on request(): a wrong
+// password answers 401, and request() treats every 401 as an expired session and navigates away,
+// which would swallow the error the login form needs to show.
+export interface DashboardLoginResult {
+  apiKey: string;
+  role: string;
+  email: string;
+  expiresAt: string;
+}
+
+export const dashboardAuthApi = {
+  login: async (data: { email: string; password: string; recaptchaToken?: string }): Promise<DashboardLoginResult> => {
+    const response = await fetch(`${API_BASE_URL}/auth/dashboard/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const body = (await response.json().catch(() => ({}))) as Partial<DashboardLoginResult> & { message?: unknown };
+    if (!response.ok) {
+      const message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      throw new Error(typeof message === 'string' && message ? message : `HTTP ${response.status}`);
+    }
+    return body as DashboardLoginResult;
+  },
+  // Best effort: the key also expires on its own, so a failed call must not block the local logout.
+  logout: (apiKey: string) =>
+    fetch(`${API_BASE_URL}/auth/dashboard/logout`, { method: 'POST', headers: { 'X-API-Key': apiKey } }).catch(
+      () => undefined,
+    ),
+  forgotPassword: (data: { email: string; recaptchaToken?: string }) =>
+    request<{ submitted: boolean }>('/auth/dashboard/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  resetPassword: (data: { token: string; password: string }) =>
+    request<{ submitted: boolean }>('/auth/dashboard/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+};
 
 export const selfServiceApi = {
   // Whether the two forms below require a reCAPTCHA token, and the public site key to render the

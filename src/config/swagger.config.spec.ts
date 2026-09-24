@@ -99,6 +99,7 @@ describe('exemptPublicOperations', () => {
 // requirement) rather than a PUBLIC_PATHS security: [] exemption.
 describe('PUBLIC_PATHS drift guard', () => {
   const EXPECTED_PUBLIC_CONTROLLERS = [
+    'src/modules/auth/dashboard-auth.controller.ts',
     'src/modules/auth/self-service-api-key.controller.ts',
     'src/modules/health/health.controller.ts',
     'src/modules/infra/infra-status.controller.ts',
@@ -139,6 +140,9 @@ describe('PUBLIC_PATHS drift guard', () => {
       [
         '/api/auth/api-keys/self-service/request',
         '/api/auth/api-keys/self-service/verify',
+        '/api/auth/dashboard/login',
+        '/api/auth/dashboard/forgot-password',
+        '/api/auth/dashboard/reset-password',
         '/api/health',
         '/api/health/live',
         '/api/health/ready',

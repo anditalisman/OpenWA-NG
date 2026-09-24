@@ -196,7 +196,17 @@
     "viewDocs": "לצפייה בתיעוד",
     "requestApiKey": "אין לך מפתח API? בקש אחד",
     "forgotApiKey": "איבדת את מפתח ה-API שלך? שחזר אותו",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "אימייל",
+    "emailPlaceholder": "you@ptamgirimenang.com",
+    "password": "סיסמה",
+    "passwordPlaceholder": "הזינו את הסיסמה",
+    "showPassword": "הצגת סיסמה",
+    "hidePassword": "הסתרת סיסמה",
+    "credentialsRequired": "נדרשים אימייל וסיסמה",
+    "signIn": "התחברות",
+    "signingIn": "מתחבר...",
+    "forgotPassword": "שכחתם את הסיסמה או מתחברים בפעם הראשונה?"
   },
   "requestApiKey": {
     "title": "בקשת מפתח API",
@@ -243,6 +253,29 @@
     "successBodyRevoked_many": "{{count}} מהמפתחות הקודמים שלך הושבתו. העתק את החדש עכשיו — הוא לא יוצג שוב.",
     "successBodyRevoked_other": "{{count}} מהמפתחות הקודמים שלך הושבתו. העתק את החדש עכשיו — הוא לא יוצג שוב.",
     "successBodyNoneRevoked": "העתק אותו עכשיו — הוא לא יוצג שוב."
+  },
+  "forgotPassword": {
+    "title": "הגדרה או איפוס של סיסמה",
+    "subtitle": "הזינו את האימייל של החשבון ונשלח קישור להגדרת סיסמה חדשה.",
+    "emailRequired": "נדרש אימייל",
+    "submit": "שליחת קישור",
+    "submitting": "שולח...",
+    "submittedTitle": "בדקו את תיבת הדואר",
+    "submittedBody": "אם ל-{{email}} יש חשבון בלוח הבקרה, קישור להגדרת הסיסמה בדרך.",
+    "backToLogin": "חזרה להתחברות"
+  },
+  "resetPassword": {
+    "title": "הגדרת סיסמה חדשה",
+    "subtitle": "בחרו סיסמה באורך {{min}} תווים לפחות.",
+    "newPassword": "סיסמה חדשה",
+    "confirmPassword": "אימות הסיסמה החדשה",
+    "tooShort": "הסיסמה חייבת להכיל לפחות {{min}} תווים",
+    "mismatch": "הסיסמאות אינן תואמות",
+    "submit": "שמירת הסיסמה",
+    "submitting": "שומר...",
+    "doneTitle": "הסיסמה נשמרה",
+    "doneBody": "כעת אפשר להתחבר עם הסיסמה החדשה.",
+    "missingToken": "בקישור הזה חסר אסימון. בקשו קישור חדש מדף ההתחברות."
   },
   "dashboard": {
     "title": "דאשבורד",

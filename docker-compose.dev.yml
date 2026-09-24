@@ -288,6 +288,10 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-}
+      # Dashboard email + password sign-in
+      - DASHBOARD_USERS=${DASHBOARD_USERS:-}
+      - DASHBOARD_SESSION_TTL_HOURS=${DASHBOARD_SESSION_TTL_HOURS:-}
+      - DASHBOARD_PASSWORD_RESET_TTL_MINUTES=${DASHBOARD_PASSWORD_RESET_TTL_MINUTES:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

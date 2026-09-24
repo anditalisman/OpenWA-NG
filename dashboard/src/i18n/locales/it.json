@@ -189,7 +189,17 @@
     "viewDocs": "Visualizza la documentazione",
     "requestApiKey": "Non hai una chiave API? Richiedine una",
     "forgotApiKey": "Hai perso la tua chiave API? Recuperala",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "tu@ptamgirimenang.com",
+    "password": "Password",
+    "passwordPlaceholder": "Inserisci la password",
+    "showPassword": "Mostra password",
+    "hidePassword": "Nascondi password",
+    "credentialsRequired": "Email e password sono obbligatorie",
+    "signIn": "Accedi",
+    "signingIn": "Accesso in corso...",
+    "forgotPassword": "Password dimenticata o primo accesso?"
   },
   "requestApiKey": {
     "title": "Richiedi una chiave API",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "La tua chiave precedente è stata disattivata. Copia quella nuova ora — non verrà mostrata di nuovo.",
     "successBodyRevoked_other": "Le tue {{count}} chiavi precedenti sono state disattivate. Copia quella nuova ora — non verrà mostrata di nuovo.",
     "successBodyNoneRevoked": "Copiala ora — non verrà mostrata di nuovo."
+  },
+  "forgotPassword": {
+    "title": "Imposta o reimposta la password",
+    "subtitle": "Inserisci l'email del tuo account e ti invieremo un link per impostare una nuova password.",
+    "emailRequired": "L'email è obbligatoria",
+    "submit": "Invia link",
+    "submitting": "Invio in corso...",
+    "submittedTitle": "Controlla la tua email",
+    "submittedBody": "Se {{email}} ha un account della dashboard, riceverai un link per impostare la password.",
+    "backToLogin": "Torna all'accesso"
+  },
+  "resetPassword": {
+    "title": "Imposta una nuova password",
+    "subtitle": "Scegli una password di almeno {{min}} caratteri.",
+    "newPassword": "Nuova password",
+    "confirmPassword": "Conferma nuova password",
+    "tooShort": "La password deve contenere almeno {{min}} caratteri",
+    "mismatch": "Le password non corrispondono",
+    "submit": "Salva password",
+    "submitting": "Salvataggio...",
+    "doneTitle": "Password salvata",
+    "doneBody": "Ora puoi accedere con la nuova password.",
+    "missingToken": "A questo link manca il token. Richiedine uno nuovo dalla pagina di accesso."
   },
   "dashboard": {
     "title": "Dashboard",

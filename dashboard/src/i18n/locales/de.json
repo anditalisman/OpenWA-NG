@@ -189,7 +189,17 @@
     "viewDocs": "Dokumentation ansehen",
     "requestApiKey": "Kein API-Schlüssel? Jetzt anfordern",
     "forgotApiKey": "API-Schlüssel verloren? Wiederherstellen",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "E-Mail",
+    "emailPlaceholder": "sie@ptamgirimenang.com",
+    "password": "Passwort",
+    "passwordPlaceholder": "Passwort eingeben",
+    "showPassword": "Passwort anzeigen",
+    "hidePassword": "Passwort verbergen",
+    "credentialsRequired": "E-Mail und Passwort sind erforderlich",
+    "signIn": "Anmelden",
+    "signingIn": "Anmeldung läuft...",
+    "forgotPassword": "Passwort vergessen oder erste Anmeldung?"
   },
   "requestApiKey": {
     "title": "API-Schlüssel anfordern",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "Ihr vorheriger Schlüssel wurde deaktiviert. Kopieren Sie den neuen jetzt — er wird nicht erneut angezeigt.",
     "successBodyRevoked_other": "Ihre {{count}} vorherigen Schlüssel wurden deaktiviert. Kopieren Sie den neuen jetzt — er wird nicht erneut angezeigt.",
     "successBodyNoneRevoked": "Kopieren Sie ihn jetzt — er wird nicht erneut angezeigt."
+  },
+  "forgotPassword": {
+    "title": "Passwort festlegen oder zurücksetzen",
+    "subtitle": "Geben Sie Ihre Konto-E-Mail ein, wir senden Ihnen einen Link zum Festlegen eines neuen Passworts.",
+    "emailRequired": "E-Mail ist erforderlich",
+    "submit": "Link senden",
+    "submitting": "Wird gesendet...",
+    "submittedTitle": "Prüfen Sie Ihr Postfach",
+    "submittedBody": "Falls {{email}} ein Dashboard-Konto hat, ist ein Link zum Festlegen des Passworts unterwegs.",
+    "backToLogin": "Zurück zur Anmeldung"
+  },
+  "resetPassword": {
+    "title": "Neues Passwort festlegen",
+    "subtitle": "Wählen Sie ein Passwort mit mindestens {{min}} Zeichen.",
+    "newPassword": "Neues Passwort",
+    "confirmPassword": "Neues Passwort bestätigen",
+    "tooShort": "Das Passwort muss mindestens {{min}} Zeichen lang sein",
+    "mismatch": "Die Passwörter stimmen nicht überein",
+    "submit": "Passwort speichern",
+    "submitting": "Wird gespeichert...",
+    "doneTitle": "Passwort gespeichert",
+    "doneBody": "Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
+    "missingToken": "Diesem Link fehlt das Token. Fordern Sie auf der Anmeldeseite einen neuen an."
   },
   "dashboard": {
     "title": "Dashboard",

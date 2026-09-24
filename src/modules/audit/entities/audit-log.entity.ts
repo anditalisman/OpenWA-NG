@@ -19,6 +19,12 @@ export enum AuditAction {
   // reCAPTCHA rejected the request/forgot submission (missing token, Google reported failure, or a
   // v3 score below RECAPTCHA_MIN_SCORE) — only ever emitted while RECAPTCHA_ENABLED=true.
   API_KEY_SELF_SERVICE_RECAPTCHA_FAILED = 'api_key_self_service_recaptcha_failed',
+  // Dashboard email/password sign-in (DashboardAuthController).
+  DASHBOARD_LOGIN_SUCCEEDED = 'dashboard_login_succeeded',
+  DASHBOARD_LOGIN_FAILED = 'dashboard_login_failed',
+  DASHBOARD_LOGOUT = 'dashboard_logout',
+  DASHBOARD_PASSWORD_RESET_REQUESTED = 'dashboard_password_reset_requested',
+  DASHBOARD_PASSWORD_RESET = 'dashboard_password_reset',
 
   // Rate-limit enforcement (sampled: at most one row per subject+kind per minute — see
   // EventsGateway — so enforcing a limit never becomes an audit-write flood of its own).

@@ -151,6 +151,10 @@ export const BLANK_SHADOWED_ENV_KEYS: string[] = [
   'SMTP_USER',
   'SMTP_PASSWORD',
   'SMTP_FROM',
+  // Dashboard email + password sign-in.
+  'DASHBOARD_USERS',
+  'DASHBOARD_SESSION_TTL_HOURS',
+  'DASHBOARD_PASSWORD_RESET_TTL_MINUTES',
   // The remainder of the documented knob set, forwarded blank once the compose forwarding list was
   // completed (compose-parity.spec.ts now derives the required forwards from .env.example, so every
   // entry here exists because a `${KEY:-}` line renders blank when the operator sets nothing).

@@ -189,7 +189,17 @@
     "viewDocs": "View Documentation",
     "requestApiKey": "Don't have an API key? Request one",
     "forgotApiKey": "Lost your API key? Recover it",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@ptamgirimenang.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "credentialsRequired": "Email and password are required",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "forgotPassword": "Forgot your password, or signing in for the first time?"
   },
   "requestApiKey": {
     "title": "Request an API Key",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "Your previous key has been deactivated. Copy the new one now — it will not be shown again.",
     "successBodyRevoked_other": "Your {{count}} previous keys have been deactivated. Copy the new one now — it will not be shown again.",
     "successBodyNoneRevoked": "Copy it now — it will not be shown again."
+  },
+  "forgotPassword": {
+    "title": "Set or Reset Your Password",
+    "subtitle": "Enter your account email and we'll send a link to set a new password.",
+    "emailRequired": "Email is required",
+    "submit": "Send link",
+    "submitting": "Sending...",
+    "submittedTitle": "Check your email",
+    "submittedBody": "If {{email}} has a dashboard account, a link to set your password is on its way.",
+    "backToLogin": "Back to sign in"
+  },
+  "resetPassword": {
+    "title": "Set a New Password",
+    "subtitle": "Choose a password of at least {{min}} characters.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "tooShort": "Password must be at least {{min}} characters",
+    "mismatch": "The passwords do not match",
+    "submit": "Save password",
+    "submitting": "Saving...",
+    "doneTitle": "Password saved",
+    "doneBody": "You can now sign in with your new password.",
+    "missingToken": "This link is missing its token. Request a new one from the sign-in page."
   },
   "dashboard": {
     "title": "Dashboard",

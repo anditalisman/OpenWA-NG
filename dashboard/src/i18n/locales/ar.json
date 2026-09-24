@@ -200,7 +200,17 @@
     "viewDocs": "عرض التوثيق",
     "requestApiKey": "ليس لديك مفتاح API؟ اطلب واحدًا",
     "forgotApiKey": "فقدت مفتاح API؟ استرجعه",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "البريد الإلكتروني",
+    "emailPlaceholder": "you@ptamgirimenang.com",
+    "password": "كلمة المرور",
+    "passwordPlaceholder": "أدخل كلمة المرور",
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
+    "credentialsRequired": "البريد الإلكتروني وكلمة المرور مطلوبان",
+    "signIn": "تسجيل الدخول",
+    "signingIn": "جارٍ تسجيل الدخول...",
+    "forgotPassword": "هل نسيت كلمة المرور أو تسجّل الدخول لأول مرة؟"
   },
   "requestApiKey": {
     "title": "طلب مفتاح API",
@@ -249,6 +259,29 @@
     "successBodyRevoked_many": "تم تعطيل {{count}} مفتاحًا سابقًا. انسخ المفتاح الجديد الآن — لن يتم عرضه مرة أخرى.",
     "successBodyRevoked_other": "تم تعطيل {{count}} مفتاح سابق. انسخ المفتاح الجديد الآن — لن يتم عرضه مرة أخرى.",
     "successBodyNoneRevoked": "انسخه الآن — لن يتم عرضه مرة أخرى."
+  },
+  "forgotPassword": {
+    "title": "تعيين كلمة المرور أو إعادة تعيينها",
+    "subtitle": "أدخل البريد الإلكتروني لحسابك وسنرسل رابطًا لتعيين كلمة مرور جديدة.",
+    "emailRequired": "البريد الإلكتروني مطلوب",
+    "submit": "إرسال الرابط",
+    "submitting": "جارٍ الإرسال...",
+    "submittedTitle": "تحقّق من بريدك الإلكتروني",
+    "submittedBody": "إذا كان لدى {{email}} حساب في لوحة التحكم، فإن رابط تعيين كلمة المرور في الطريق.",
+    "backToLogin": "العودة إلى تسجيل الدخول"
+  },
+  "resetPassword": {
+    "title": "تعيين كلمة مرور جديدة",
+    "subtitle": "اختر كلمة مرور لا تقل عن {{min}} حرفًا.",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmPassword": "تأكيد كلمة المرور الجديدة",
+    "tooShort": "يجب ألا تقل كلمة المرور عن {{min}} حرفًا",
+    "mismatch": "كلمتا المرور غير متطابقتين",
+    "submit": "حفظ كلمة المرور",
+    "submitting": "جارٍ الحفظ...",
+    "doneTitle": "تم حفظ كلمة المرور",
+    "doneBody": "يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.",
+    "missingToken": "هذا الرابط لا يحتوي على الرمز. اطلب رابطًا جديدًا من صفحة تسجيل الدخول."
   },
   "dashboard": {
     "title": "لوحة التحكم",

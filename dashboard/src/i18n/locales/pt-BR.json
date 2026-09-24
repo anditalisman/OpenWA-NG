@@ -189,7 +189,17 @@
     "viewDocs": "Ver documentação",
     "requestApiKey": "Não tem uma chave de API? Solicite uma",
     "forgotApiKey": "Perdeu sua chave de API? Recupere-a",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "E-mail",
+    "emailPlaceholder": "voce@ptamgirimenang.com",
+    "password": "Senha",
+    "passwordPlaceholder": "Digite sua senha",
+    "showPassword": "Mostrar senha",
+    "hidePassword": "Ocultar senha",
+    "credentialsRequired": "E-mail e senha são obrigatórios",
+    "signIn": "Entrar",
+    "signingIn": "Entrando...",
+    "forgotPassword": "Esqueceu a senha ou é seu primeiro acesso?"
   },
   "requestApiKey": {
     "title": "Solicitar uma chave de API",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "Sua chave anterior foi desativada. Copie a nova agora — ela não será exibida novamente.",
     "successBodyRevoked_other": "Suas {{count}} chaves anteriores foram desativadas. Copie a nova agora — ela não será exibida novamente.",
     "successBodyNoneRevoked": "Copie agora — ela não será exibida novamente."
+  },
+  "forgotPassword": {
+    "title": "Definir ou redefinir a senha",
+    "subtitle": "Informe o e-mail da sua conta e enviaremos um link para definir uma nova senha.",
+    "emailRequired": "O e-mail é obrigatório",
+    "submit": "Enviar link",
+    "submitting": "Enviando...",
+    "submittedTitle": "Verifique seu e-mail",
+    "submittedBody": "Se {{email}} tiver uma conta no painel, um link para definir sua senha está a caminho.",
+    "backToLogin": "Voltar para o login"
+  },
+  "resetPassword": {
+    "title": "Definir uma nova senha",
+    "subtitle": "Escolha uma senha com pelo menos {{min}} caracteres.",
+    "newPassword": "Nova senha",
+    "confirmPassword": "Confirmar nova senha",
+    "tooShort": "A senha deve ter pelo menos {{min}} caracteres",
+    "mismatch": "As senhas não coincidem",
+    "submit": "Salvar senha",
+    "submitting": "Salvando...",
+    "doneTitle": "Senha salva",
+    "doneBody": "Agora você pode entrar com sua nova senha.",
+    "missingToken": "Este link está sem o token. Solicite um novo na página de login."
   },
   "dashboard": {
     "title": "Painel",

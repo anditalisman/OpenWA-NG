@@ -4871,12 +4871,87 @@ The key is read from the `X-API-Key` header, not the body; send an empty body. T
 **Response** `200`
 
 ```json
-{ "valid": true, "role": "operator" }
+{ "valid": true, "role": "operator", "dashboardSession": true, "email": "hary@ptamgirimenang.com" }
 ```
+
+`dashboardSession` is `true` only for a key minted by a dashboard email + password login (see below), and `email` is then the signed-in account; any other valid key answers `"dashboardSession": false` with no `email`. The dashboard refuses a key whose `dashboardSession` is not `true`.
 
 **Errors:** `401` missing/invalid/revoked/expired key (raised by the global guard before the handler)
 
 > Implemented by `AuthValidateController` (`@Controller('auth')`), sharing the same `/api/auth` base.
+
+#### POST /api/auth/dashboard/login
+
+Sign in to the dashboard with email and password. Accounts come from the `DASHBOARD_USERS` environment variable; each login mints a fresh API key that carries the account's role and session list and expires after `DASHBOARD_SESSION_TTL_HOURS` (default 12).
+
+**Auth:** public
+
+**Request body**
+
+| Field            | Type   | Required | Description                                                     |
+| ---------------- | ------ | -------- | --------------------------------------------------------------- |
+| `email`          | string | yes      | Account email (case-insensitive)                                |
+| `password`       | string | yes      | Account password                                                |
+| `recaptchaToken` | string | no       | reCAPTCHA v3 token; required only when `RECAPTCHA_ENABLED=true` |
+
+**Response** `200`
+
+```json
+{
+  "apiKey": "owa_k1_…",
+  "role": "admin",
+  "email": "hary@ptamgirimenang.com",
+  "expiresAt": "2026-09-25T02:00:00.000Z"
+}
+```
+
+**Errors:** `400` reCAPTCHA failed · `401` wrong email or password, an account without a password yet, or an account locked for 15 minutes after five wrong passwords
+
+#### POST /api/auth/dashboard/logout
+
+End the dashboard login behind the calling key: the minted key is deleted (or expired, when it is the last usable admin key). A key that is not a dashboard login is left untouched.
+
+**Auth:** API key (any valid role)
+
+**Response** `200`
+
+```json
+{ "loggedOut": true }
+```
+
+**Errors:** `401` missing/invalid key
+
+#### POST /api/auth/dashboard/forgot-password
+
+Email a single-use link to set or reset the password — also the first-time path, since a new account has no password. The response is identical whether or not the address has an account.
+
+**Auth:** public
+
+**Request body:** `email` (string, required), `recaptchaToken` (string, optional as above)
+
+**Response** `200`
+
+```json
+{ "submitted": true }
+```
+
+**Errors:** `400` reCAPTCHA failed · `503` the email could not be sent
+
+#### POST /api/auth/dashboard/reset-password
+
+Set a new password from an emailed link. The link works once and expires after `DASHBOARD_PASSWORD_RESET_TTL_MINUTES` (default 30). Setting a password clears any lockout and signs out the account's open logins.
+
+**Auth:** public
+
+**Request body:** `token` (string, required), `password` (string, 10–128 characters, required)
+
+**Response** `200`
+
+```json
+{ "submitted": true }
+```
+
+**Errors:** `400` password too short or too long · `404` unknown link · `410` link already used or expired
 
 ### 6.4.10 System (Health, Metrics, Stats, Settings, Audit)
 

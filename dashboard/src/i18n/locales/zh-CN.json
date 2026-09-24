@@ -189,7 +189,17 @@
     "viewDocs": "查看文档",
     "requestApiKey": "没有 API 密钥？申请一个",
     "forgotApiKey": "忘记了 API 密钥？找回它",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "邮箱",
+    "emailPlaceholder": "you@ptamgirimenang.com",
+    "password": "密码",
+    "passwordPlaceholder": "请输入密码",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "credentialsRequired": "请输入邮箱和密码",
+    "signIn": "登录",
+    "signingIn": "正在登录...",
+    "forgotPassword": "忘记密码或首次登录？"
   },
   "requestApiKey": {
     "title": "申请 API 密钥",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "您之前的密钥已停用。请立即复制新密钥 — 之后将不再显示。",
     "successBodyRevoked_other": "您之前的 {{count}} 个密钥已停用。请立即复制新密钥 — 之后将不再显示。",
     "successBodyNoneRevoked": "请立即复制 — 之后将不再显示。"
+  },
+  "forgotPassword": {
+    "title": "设置或重置密码",
+    "subtitle": "输入您的账户邮箱，我们将发送设置新密码的链接。",
+    "emailRequired": "请输入邮箱",
+    "submit": "发送链接",
+    "submitting": "正在发送...",
+    "submittedTitle": "请查收邮件",
+    "submittedBody": "如果 {{email}} 拥有控制台账户，设置密码的链接已发出。",
+    "backToLogin": "返回登录"
+  },
+  "resetPassword": {
+    "title": "设置新密码",
+    "subtitle": "请选择至少 {{min}} 个字符的密码。",
+    "newPassword": "新密码",
+    "confirmPassword": "确认新密码",
+    "tooShort": "密码至少需要 {{min}} 个字符",
+    "mismatch": "两次输入的密码不一致",
+    "submit": "保存密码",
+    "submitting": "正在保存...",
+    "doneTitle": "密码已保存",
+    "doneBody": "现在可以使用新密码登录。",
+    "missingToken": "此链接缺少令牌，请在登录页面重新申请。"
   },
   "dashboard": {
     "title": "仪表盘",
