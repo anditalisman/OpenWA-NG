@@ -314,7 +314,8 @@ describe('SessionController — muteChat', () => {
 });
 
 describe('SessionController findAll name filter', () => {
-  const apiKey = { allowedSessions: ['sess-uuid-1'] } as unknown as ApiKey;
+  // Fork PAMGM: the controller scopes by effectiveAllowedSessions, which AuthService.validateApiKey fills in.
+  const apiKey = { allowedSessions: ['sess-uuid-1'], effectiveAllowedSessions: ['sess-uuid-1'] } as unknown as ApiKey;
   let sessionService: { findAll: jest.Mock; isActive: jest.Mock };
   let controller: SessionController;
 

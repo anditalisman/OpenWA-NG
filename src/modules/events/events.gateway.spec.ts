@@ -248,7 +248,11 @@ describe('EventsGateway connection auth + subscribe re-validation', () => {
     // The Socket.IO adapter delivers a handler's return value through the ack callback and nothing
     // else, so a client that emits without one (the dashboard, and the documented example client)
     // saw no answer at all: no subscribe confirmation, and none of the refusals.
-    authService.validateApiKey.mockResolvedValue({ name: 'k', allowedSessions: ['sess-1'] });
+    authService.validateApiKey.mockResolvedValue({
+      name: 'k',
+      allowedSessions: ['sess-1'],
+      effectiveAllowedSessions: ['sess-1'],
+    });
     const sock = makeSocket({ apiKey: 'good' });
     await gateway.handleConnection(asSocket(sock));
     sock.emit.mockClear();

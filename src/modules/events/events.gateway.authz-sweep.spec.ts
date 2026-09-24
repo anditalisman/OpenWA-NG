@@ -4,6 +4,7 @@ import type { ModuleRef } from '@nestjs/core';
 import type { ConfigService } from '@nestjs/config';
 import type { Socket } from 'socket.io';
 import { ApiKey, ApiKeyRole } from '../auth/entities/api-key.entity';
+import type { Session } from '../session/entities/session.entity';
 import { AuthService } from '../auth/auth.service';
 import { ApiKeyUsageTracker } from '../auth/api-key-usage-tracker.service';
 import { AuditService } from '../audit/audit.service';
@@ -100,7 +101,10 @@ describe('EventsGateway API-key authorization sweep', () => {
   beforeEach(async () => {
     await repo.clear();
     const moduleRef = { get: () => gateway } as unknown as ModuleRef;
-    service = new AuthService(repo, new ApiKeyUsageTracker(repo), moduleRef);
+    // Fork PAMGM: AuthService also takes the sessions repository, to resolve a non-admin unscoped key's
+    // effective allowlist to the sessions it created. None are created here, so it resolves to [].
+    const sessionRepo = { find: jest.fn().mockResolvedValue([]) } as unknown as Repository<Session>;
+    service = new AuthService(repo, sessionRepo, new ApiKeyUsageTracker(repo), moduleRef);
     gateway = new EventsGateway(
       service,
       { logWarn: jest.fn().mockResolvedValue(null) } as unknown as AuditService,
@@ -204,7 +208,13 @@ describe('EventsGateway API-key authorization sweep', () => {
   });
 
   it('evicts a socket that subscribed under a widening the row no longer carries', async () => {
-    const { apiKey, rawKey } = await service.createApiKey({ name: 'scoped key', allowedSessions: ['sess-a'] });
+    // Fork PAMGM: only an ADMIN key widens to every session when unscoped (a non-admin unscoped key is
+    // held to the sessions it created), so the widening this test needs is exercised on an ADMIN key.
+    const { apiKey, rawKey } = await service.createApiKey({
+      name: 'scoped key',
+      role: ApiKeyRole.ADMIN,
+      allowedSessions: ['sess-a'],
+    });
     const sock = await connect(rawKey);
 
     // Unscoped by a write this process never saw, subscribed to every session under it, then put
