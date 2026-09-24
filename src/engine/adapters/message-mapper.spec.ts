@@ -143,6 +143,11 @@ describe('mapWwebjsMessageType (engine type-token -> neutral MessageType boundar
     ['call_log', 'call'],
     ['revoked', 'revoked'],
     ['poll_creation', 'poll'],
+    // A tapped button, list row or template button: WA Web carries the chosen option's text in the
+    // body, and Baileys reports the same replies as text (#562).
+    ['buttons_response', 'text'],
+    ['list_response', 'text'],
+    ['template_button_reply', 'text'],
     ['e2e_notification', 'unknown'], // any unmapped wwebjs type
   ])('maps wwebjs type %s -> %s', (raw, expected) => {
     expect(mapWwebjsMessageType(raw)).toBe(expected);
