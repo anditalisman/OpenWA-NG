@@ -30,6 +30,8 @@ export type StartupValidation = { action: 'role'; role: UserRole } | { action: '
  *   logout; the cached role is a lie.
  * - any other non-ok status (429 rate limit, 5xx, a proxy error page) → keep the cached role:
  *   a transient failure proves nothing about the key, so it must not eject the user.
+ * - ok but not a dashboard login (`dashboardSession` not true) → logout: the dashboard signs in with
+ *   email + password only, so an integration API key left in storage must not keep working here.
  * - ok + role → refresh the cached role from the server (a demoted key must lose its old powers).
  * - anything else (unexpected body shape) → keep the cached role.
  * A network throw never reaches this function; the caller keeps the cached role for that case
@@ -37,10 +39,11 @@ export type StartupValidation = { action: 'role'; role: UserRole } | { action: '
  */
 export function resolveStartupValidation(
   status: number,
-  body: { valid?: boolean; role?: string } | null,
+  body: { valid?: boolean; role?: string; dashboardSession?: boolean } | null,
 ): StartupValidation {
   if (status === 401 || status === 403) return { action: 'logout' };
   if (status < 200 || status >= 300) return { action: 'keep' };
+  if (body?.valid && body.dashboardSession !== true) return { action: 'logout' };
   if (body?.valid && isUserRole(body.role)) return { action: 'role', role: body.role };
   return { action: 'keep' };
 }

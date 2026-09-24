@@ -4,17 +4,23 @@ import { Link } from 'react-router-dom';
 import { Eye, EyeOff, Languages } from 'lucide-react';
 import { CustomSelect } from '../components/CustomSelect';
 import { languageOptions, resolveSupportedLanguage, type SupportedLanguage } from '../i18n';
-import { API_BASE_URL } from '../services/api';
+import { dashboardAuthApi } from '../services/api';
+import { useRecaptcha } from '../hooks/useRecaptcha';
 import './Login.css';
 
 interface LoginProps {
   onLogin: (apiKey: string, role?: string) => void;
 }
 
+// Sign-in is email + password only. The server answers with a short-lived key minted for this login,
+// which the rest of the dashboard sends as X-API-Key exactly like before; a plain API key cannot be
+// entered here (and one left in storage is logged out at startup, see resolveStartupValidation).
 export function Login({ onLogin }: LoginProps) {
   const { t, i18n } = useTranslation();
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
+  const { getToken } = useRecaptcha();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const currentLang = resolveSupportedLanguage(i18n.resolvedLanguage || i18n.language);
@@ -25,33 +31,19 @@ export function Login({ onLogin }: LoginProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apiKey.trim()) {
-      setError(t('login.apiKeyRequired'));
+    if (!email.trim() || !password) {
+      setError(t('login.credentialsRequired'));
       return;
     }
     setIsLoading(true);
     setError('');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/validate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey,
-        },
-      });
-
-      if (response.ok) {
-        // The validate body already carries the key's role — hand it up so the app can set it
-        // directly instead of re-validating the same key a second time.
-        const data: { role?: string } = await response.json().catch(() => ({}));
-        onLogin(apiKey, data.role);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        setError(errorData.message || t('login.invalidKey'));
-      }
-    } catch {
-      setError(t('login.connectionError'));
+      const recaptchaToken = await getToken('dashboard_login');
+      const result = await dashboardAuthApi.login({ email: email.trim(), password, recaptchaToken });
+      onLogin(result.apiKey, result.role);
+    } catch (err) {
+      setError(err instanceof TypeError ? t('login.connectionError') : (err as Error).message);
     } finally {
       setIsLoading(false);
     }
@@ -82,51 +74,53 @@ export function Login({ onLogin }: LoginProps) {
           />
         </div>
 
-        <form onSubmit={handleSubmit} className="login-form">
+        <form onSubmit={e => void handleSubmit(e)} className="login-form">
           <div className="input-group">
-            <label htmlFor="apiKey">{t('login.apiKey')}</label>
+            <label htmlFor="email">{t('login.email')}</label>
             <div className="input-wrapper">
               <input
-                id="apiKey"
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder={t('login.apiKeyPlaceholder')}
+                id="email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder={t('login.emailPlaceholder')}
+                className={error ? 'error' : ''}
+              />
+            </div>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="password">{t('login.password')}</label>
+            <div className="input-wrapper">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder={t('login.passwordPlaceholder')}
                 className={error ? 'error' : ''}
               />
               <button
                 type="button"
                 className="toggle-visibility"
-                onClick={() => setShowKey(!showKey)}
-                aria-label={showKey ? t('common.hideApiKey') : t('common.showApiKey')}
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
-                {showKey ? <EyeOff size={20} /> : <Eye size={20} />}
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
             {error && <span className="error-message">{error}</span>}
           </div>
 
           <button type="submit" className="connect-btn" disabled={isLoading}>
-            {isLoading ? t('login.connecting') : t('login.connect')}
+            {isLoading ? t('login.signingIn') : t('login.signIn')}
           </button>
         </form>
 
         <p className="login-help">
-          {t('login.help')}{' '}
-          <a
-            href="https://claude.ai/code/artifact/0485d151-a6dc-4d00-a7d9-58f27017a2f0"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {t('login.viewDocs')}
-          </a>
-        </p>
-
-        <p className="login-help">
-          <Link to="/request-api-key">{t('login.requestApiKey')}</Link>
-        </p>
-        <p className="login-help">
-          <Link to="/forgot-api-key">{t('login.forgotApiKey')}</Link>
+          <Link to="/forgot-password">{t('login.forgotPassword')}</Link>
         </p>
       </div>
     </div>

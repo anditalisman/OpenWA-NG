@@ -25,6 +25,9 @@ export const PUBLIC_PATHS = [
   '/api/ingress/{pluginId}/{instanceId}/{path}',
   '/api/auth/api-keys/self-service/request',
   '/api/auth/api-keys/self-service/verify',
+  '/api/auth/dashboard/login',
+  '/api/auth/dashboard/forgot-password',
+  '/api/auth/dashboard/reset-password',
 ];
 
 const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'trace', 'search'] as const;

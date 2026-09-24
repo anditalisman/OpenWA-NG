@@ -189,7 +189,17 @@
     "viewDocs": "查看文件",
     "requestApiKey": "沒有 API 金鑰？申請一個",
     "forgotApiKey": "忘記了 API 金鑰？取回它",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "電郵",
+    "emailPlaceholder": "you@ptamgirimenang.com",
+    "password": "密碼",
+    "passwordPlaceholder": "請輸入密碼",
+    "showPassword": "顯示密碼",
+    "hidePassword": "隱藏密碼",
+    "credentialsRequired": "請輸入電郵及密碼",
+    "signIn": "登入",
+    "signingIn": "正在登入...",
+    "forgotPassword": "忘記密碼或首次登入？"
   },
   "requestApiKey": {
     "title": "申請 API 金鑰",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "您之前的金鑰已停用。請立即複製新金鑰 — 之後將不再顯示。",
     "successBodyRevoked_other": "您之前的 {{count}} 個金鑰已停用。請立即複製新金鑰 — 之後將不再顯示。",
     "successBodyNoneRevoked": "請立即複製 — 之後將不再顯示。"
+  },
+  "forgotPassword": {
+    "title": "設定或重設密碼",
+    "subtitle": "輸入你的帳戶電郵，我們會寄出設定新密碼的連結。",
+    "emailRequired": "請輸入電郵",
+    "submit": "寄出連結",
+    "submitting": "正在寄出...",
+    "submittedTitle": "請查閱電郵",
+    "submittedBody": "如果 {{email}} 擁有控制台帳戶，設定密碼的連結已寄出。",
+    "backToLogin": "返回登入"
+  },
+  "resetPassword": {
+    "title": "設定新密碼",
+    "subtitle": "請選擇最少 {{min}} 個字元的密碼。",
+    "newPassword": "新密碼",
+    "confirmPassword": "確認新密碼",
+    "tooShort": "密碼最少需要 {{min}} 個字元",
+    "mismatch": "兩次輸入的密碼不相符",
+    "submit": "儲存密碼",
+    "submitting": "正在儲存...",
+    "doneTitle": "密碼已儲存",
+    "doneBody": "現在可以使用新密碼登入。",
+    "missingToken": "此連結缺少權杖，請在登入頁面重新申請。"
   },
   "dashboard": {
     "title": "控制面板",

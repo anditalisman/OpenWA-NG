@@ -189,7 +189,17 @@
     "viewDocs": "Voir la documentation",
     "requestApiKey": "Pas de clé API ? Demandez-en une",
     "forgotApiKey": "Clé API perdue ? Récupérez-la",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "E-mail",
+    "emailPlaceholder": "vous@ptamgirimenang.com",
+    "password": "Mot de passe",
+    "passwordPlaceholder": "Saisissez votre mot de passe",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
+    "credentialsRequired": "L'e-mail et le mot de passe sont requis",
+    "signIn": "Se connecter",
+    "signingIn": "Connexion...",
+    "forgotPassword": "Mot de passe oublié ou première connexion ?"
   },
   "requestApiKey": {
     "title": "Demander une clé API",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "Votre clé précédente a été désactivée. Copiez la nouvelle maintenant — elle ne sera plus affichée.",
     "successBodyRevoked_other": "Vos {{count}} clés précédentes ont été désactivées. Copiez la nouvelle maintenant — elle ne sera plus affichée.",
     "successBodyNoneRevoked": "Copiez-la maintenant — elle ne sera plus affichée."
+  },
+  "forgotPassword": {
+    "title": "Définir ou réinitialiser le mot de passe",
+    "subtitle": "Saisissez l'e-mail de votre compte et nous vous enverrons un lien pour définir un nouveau mot de passe.",
+    "emailRequired": "L'e-mail est requis",
+    "submit": "Envoyer le lien",
+    "submitting": "Envoi...",
+    "submittedTitle": "Consultez vos e-mails",
+    "submittedBody": "Si {{email}} possède un compte du tableau de bord, un lien pour définir votre mot de passe est en route.",
+    "backToLogin": "Retour à la connexion"
+  },
+  "resetPassword": {
+    "title": "Définir un nouveau mot de passe",
+    "subtitle": "Choisissez un mot de passe d’au moins {{min}} caractères.",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le nouveau mot de passe",
+    "tooShort": "Le mot de passe doit contenir au moins {{min}} caractères",
+    "mismatch": "Les mots de passe ne correspondent pas",
+    "submit": "Enregistrer le mot de passe",
+    "submitting": "Enregistrement...",
+    "doneTitle": "Mot de passe enregistré",
+    "doneBody": "Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+    "missingToken": "Ce lien ne contient pas de jeton. Demandez-en un nouveau depuis la page de connexion."
   },
   "dashboard": {
     "title": "Tableau de bord",

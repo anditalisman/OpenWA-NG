@@ -8,7 +8,7 @@ import { ToastProvider } from './components/Toast';
 import { useRole } from './hooks/useRole';
 import { RoleProvider } from './components/RoleProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { API_BASE_URL } from './services/api';
+import { API_BASE_URL, dashboardAuthApi } from './services/api';
 import { clearActorState, isUserRole, resolveStartupValidation } from './utils/authLifecycle';
 import './App.css';
 
@@ -17,6 +17,8 @@ const RequestApiKey = lazy(() => import('./pages/RequestApiKey').then(m => ({ de
 const VerifyApiKey = lazy(() => import('./pages/VerifyApiKey').then(m => ({ default: m.VerifyApiKey })));
 const ForgotApiKey = lazy(() => import('./pages/ForgotApiKey').then(m => ({ default: m.ForgotApiKey })));
 const RecoverApiKey = lazy(() => import('./pages/RecoverApiKey').then(m => ({ default: m.RecoverApiKey })));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })));
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const Sessions = lazy(() => import('./pages/Sessions').then(m => ({ default: m.Sessions })));
 const Chats = lazy(() => import('./pages/Chats').then(m => ({ default: m.Chats })));
@@ -61,6 +63,9 @@ function AppContent() {
   };
 
   const handleLogout = useCallback(() => {
+    // End the login server-side too, so the minted key stops working now rather than at expiry.
+    const storedKey = sessionStorage.getItem('openwa_api_key');
+    if (storedKey) void dashboardAuthApi.logout(storedKey);
     setApiKey('');
     setIsAuthenticated(false);
     setRole(null);
@@ -110,6 +115,8 @@ function AppContent() {
             <Route path="/verify-api-key" element={<VerifyApiKey />} />
             <Route path="/forgot-api-key" element={<ForgotApiKey />} />
             <Route path="/recover-api-key" element={<RecoverApiKey />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             {isAuthenticated ? (
               <Route path="/" element={<Layout onLogout={handleLogout} userRole={role} />}>
                 <Route index element={<Dashboard />} />

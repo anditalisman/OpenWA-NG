@@ -189,7 +189,17 @@
     "viewDocs": "문서 보기",
     "requestApiKey": "API 키가 없으신가요? 요청하기",
     "forgotApiKey": "API 키를 잃어버리셨나요? 복구하기",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "이메일",
+    "emailPlaceholder": "you@ptamgirimenang.com",
+    "password": "비밀번호",
+    "passwordPlaceholder": "비밀번호를 입력하세요",
+    "showPassword": "비밀번호 표시",
+    "hidePassword": "비밀번호 숨기기",
+    "credentialsRequired": "이메일과 비밀번호를 입력해야 합니다",
+    "signIn": "로그인",
+    "signingIn": "로그인 중...",
+    "forgotPassword": "비밀번호를 잊으셨거나 처음 로그인하시나요?"
   },
   "requestApiKey": {
     "title": "API 키 요청",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "이전 키가 비활성화되었습니다. 지금 새 키를 복사하세요 — 다시 표시되지 않습니다.",
     "successBodyRevoked_other": "이전 키 {{count}}개가 비활성화되었습니다. 지금 새 키를 복사하세요 — 다시 표시되지 않습니다.",
     "successBodyNoneRevoked": "지금 복사하세요 — 다시 표시되지 않습니다."
+  },
+  "forgotPassword": {
+    "title": "비밀번호 설정 또는 재설정",
+    "subtitle": "계정 이메일을 입력하시면 새 비밀번호를 설정할 수 있는 링크를 보내드립니다.",
+    "emailRequired": "이메일을 입력해야 합니다",
+    "submit": "링크 보내기",
+    "submitting": "보내는 중...",
+    "submittedTitle": "이메일을 확인하세요",
+    "submittedBody": "{{email}}에 대시보드 계정이 있다면 비밀번호 설정 링크가 발송되었습니다.",
+    "backToLogin": "로그인으로 돌아가기"
+  },
+  "resetPassword": {
+    "title": "새 비밀번호 설정",
+    "subtitle": "{{min}}자 이상의 비밀번호를 선택하세요.",
+    "newPassword": "새 비밀번호",
+    "confirmPassword": "새 비밀번호 확인",
+    "tooShort": "비밀번호는 {{min}}자 이상이어야 합니다",
+    "mismatch": "비밀번호가 일치하지 않습니다",
+    "submit": "비밀번호 저장",
+    "submitting": "저장 중...",
+    "doneTitle": "비밀번호가 저장되었습니다",
+    "doneBody": "이제 새 비밀번호로 로그인할 수 있습니다.",
+    "missingToken": "이 링크에 토큰이 없습니다. 로그인 페이지에서 새 링크를 요청하세요."
   },
   "dashboard": {
     "title": "대시보드",

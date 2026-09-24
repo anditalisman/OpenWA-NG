@@ -36,6 +36,9 @@ const ALLOWLIST = new Map<string, string>([
   // Self-validation only: the route returns {valid, role} for the calling key and reads/writes no
   // resource, so a session-restricted key validating itself is harmless (it cannot broaden scope).
   ['auth-validate.controller.ts :: validate', 'self-validation of the calling key; no resource access'],
+  // Ends the dashboard login behind the calling key only (a key that is not a dashboard login is a
+  // no-op), so a session-restricted key can at most sign itself out.
+  ['dashboard-auth.controller.ts :: logout', 'acts only on the calling key; no resource access'],
 ]);
 
 /**

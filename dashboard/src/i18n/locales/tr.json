@@ -190,7 +190,17 @@
     "footer": "Yudhi Armyndharis ve OpenWA Topluluğu tarafından ❤️ ile yapılmıştır",
     "version": "v{{version}} · {{date}}",
     "forgotApiKey": "Lost your API key? Recover it",
-    "requestApiKey": "Don't have an API key? Request one"
+    "requestApiKey": "Don't have an API key? Request one",
+    "email": "E-posta",
+    "emailPlaceholder": "siz@ptamgirimenang.com",
+    "password": "Şifre",
+    "passwordPlaceholder": "Şifrenizi girin",
+    "showPassword": "Şifreyi göster",
+    "hidePassword": "Şifreyi gizle",
+    "credentialsRequired": "E-posta ve şifre gereklidir",
+    "signIn": "Giriş yap",
+    "signingIn": "Giriş yapılıyor...",
+    "forgotPassword": "Şifrenizi mi unuttunuz, yoksa ilk girişiniz mi?"
   },
   "dashboard": {
     "title": "Kontrol Paneli",
@@ -1024,6 +1034,29 @@
     "successBodyRevoked_one": "Your previous key has been deactivated. Copy the new one now — it will not be shown again.",
     "successBodyRevoked_other": "Your {{count}} previous keys have been deactivated. Copy the new one now — it will not be shown again.",
     "successTitle": "Your API key has been recovered"
+  },
+  "forgotPassword": {
+    "title": "Şifre belirle veya sıfırla",
+    "subtitle": "Hesap e-postanızı girin, yeni bir şifre belirlemeniz için bir bağlantı gönderelim.",
+    "emailRequired": "E-posta gereklidir",
+    "submit": "Bağlantı gönder",
+    "submitting": "Gönderiliyor...",
+    "submittedTitle": "E-postanızı kontrol edin",
+    "submittedBody": "{{email}} adresinin bir panel hesabı varsa, şifrenizi belirlemeniz için bir bağlantı yolda.",
+    "backToLogin": "Girişe dön"
+  },
+  "resetPassword": {
+    "title": "Yeni şifre belirle",
+    "subtitle": "En az {{min}} karakterlik bir şifre seçin.",
+    "newPassword": "Yeni şifre",
+    "confirmPassword": "Yeni şifreyi onayla",
+    "tooShort": "Şifre en az {{min}} karakter olmalıdır",
+    "mismatch": "Şifreler eşleşmiyor",
+    "submit": "Şifreyi kaydet",
+    "submitting": "Kaydediliyor...",
+    "doneTitle": "Şifre kaydedildi",
+    "doneBody": "Artık yeni şifrenizle giriş yapabilirsiniz.",
+    "missingToken": "Bu bağlantıda belirteç eksik. Giriş sayfasından yenisini isteyin."
   },
   "requestApiKey": {
     "backToLogin": "Back to login",

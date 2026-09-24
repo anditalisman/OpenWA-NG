@@ -41,15 +41,25 @@ test('startup validation: 429/5xx keeps the cached role (transient failure, not 
 });
 
 test('startup validation: ok + role refreshes the cached role from the server', () => {
-  assert.deepEqual(resolveStartupValidation(200, { valid: true, role: 'viewer' }), {
+  assert.deepEqual(resolveStartupValidation(200, { valid: true, role: 'viewer', dashboardSession: true }), {
     action: 'role',
     role: 'viewer',
   });
 });
 
+test('startup validation: a valid key that is not a dashboard login is logged out', () => {
+  // Email + password is the only way in; a plain integration API key must not keep a session.
+  assert.deepEqual(resolveStartupValidation(200, { valid: true, role: 'admin' }), { action: 'logout' });
+  assert.deepEqual(resolveStartupValidation(200, { valid: true, role: 'admin', dashboardSession: false }), {
+    action: 'logout',
+  });
+});
+
 test('startup validation: ok without a usable role keeps the cached role', () => {
   assert.deepEqual(resolveStartupValidation(200, { valid: false }), { action: 'keep' });
-  assert.deepEqual(resolveStartupValidation(200, { valid: true, role: 'superuser' }), { action: 'keep' });
+  assert.deepEqual(resolveStartupValidation(200, { valid: true, role: 'superuser', dashboardSession: true }), {
+    action: 'keep',
+  });
   assert.deepEqual(resolveStartupValidation(200, null), { action: 'keep' });
 });
 
@@ -60,9 +70,9 @@ test('isUserRole accepts exactly the three known roles', () => {
   }
 });
 
-// ── App-level auth flow: exactly one /auth/validate per sign-in ──────────────
-// Render smoke tests of the full App for the two entry paths (fresh sign-in, page reload with a
-// saved key). Harness mirrors Infrastructure.test.ts: jsdom globals, a fetch stub recording every
+// ── App-level auth flow: email + password sign-in, startup re-validation ──────
+// Render smoke tests of the full App for the entry paths (fresh sign-in, page reload with a saved
+// key). Harness mirrors Infrastructure.test.ts: jsdom globals, a fetch stub recording every
 // call, i18n catalogues awaited before render. App brings its own providers, so no wrapper here.
 
 const LOGIN_KEY = 'openwa_api_key';
@@ -78,7 +88,13 @@ const fetchCalls: FetchCall[] = [];
 // Per-test body for POST /auth/validate. The home page's stats endpoints need their object shapes
 // ([] would crash Dashboard's overview render); every other request gets an empty list, which the
 // post-login pages' React Query hooks tolerate.
-let validateBody: { valid?: boolean; role?: string } = { valid: true, role: 'operator' };
+let validateBody: { valid?: boolean; role?: string; dashboardSession?: boolean } = {
+  valid: true,
+  role: 'operator',
+  dashboardSession: true,
+};
+// Per-test body for POST /auth/dashboard/login (the email + password sign-in).
+let loginBody: { apiKey: string; role?: string } = { apiKey: 'minted-key', role: 'operator' };
 
 function installFetchStub(): void {
   globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -89,6 +105,7 @@ function installFetchStub(): void {
 
     let body: unknown = [];
     if (method === 'POST' && path === '/api/auth/validate') body = validateBody;
+    else if (method === 'POST' && path === '/api/auth/dashboard/login') body = loginBody;
     else if (path === '/api/stats/overview')
       body = {
         sessions: { active: 0, total: 0, byStatus: {} },
@@ -99,6 +116,10 @@ function installFetchStub(): void {
       new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }),
     );
   };
+}
+
+function loginCallCount(): number {
+  return fetchCalls.filter(c => c.method === 'POST' && c.path === '/api/auth/dashboard/login').length;
 }
 
 function validateCallCount(): number {
@@ -151,51 +172,70 @@ afterEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   fetchCalls.length = 0;
-  validateBody = { valid: true, role: 'operator' };
+  validateBody = { valid: true, role: 'operator', dashboardSession: true };
+  loginBody = { apiKey: 'minted-key', role: 'operator' };
 });
 
-// Types a key into the login form and submits it, then waits until App has applied the role from
-// the validate response (the synchronous tail of handleLogin).
-async function signIn(apiKey: string): Promise<void> {
+// Fills the email + password form and submits it, then waits until App has applied the role from
+// the login response (the synchronous tail of handleLogin).
+async function signIn(email: string, password: string): Promise<void> {
   const { screen, waitFor, fireEvent } = rtl;
-  const input = await screen.findByLabelText('API Key');
-  fireEvent.change(input, { target: { value: apiKey } });
-  fireEvent.submit(input.closest('form')!);
+  const emailInput = await screen.findByLabelText('Email');
+  fireEvent.change(emailInput, { target: { value: email } });
+  fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
+  fireEvent.submit(emailInput.closest('form')!);
   await waitFor(() => assert.ok(localStorage.getItem(ROLE_KEY), 'expected a role to be stored after sign-in'));
   // Give the post-login render and its effects a macrotask to fire before counting requests.
   await new Promise(resolve => setTimeout(resolve, 50));
 }
 
-test('a fresh sign-in makes exactly one /auth/validate request, feeding the role from its response', async () => {
+test('the sign-in form asks for email and password, not an API key', async () => {
   rtl.render(createElement(App));
-
-  await signIn('fresh-key');
-
-  // The login page's own validate is the one request; the startup re-validation effect must not
-  // re-fire on the null→key transition that storing the fresh key causes.
-  assert.equal(validateCallCount(), 1);
-  assert.equal(localStorage.getItem(ROLE_KEY), 'operator');
-  assert.equal(sessionStorage.getItem(LOGIN_KEY), 'fresh-key');
+  await rtl.screen.findByLabelText('Email');
+  assert.ok(rtl.screen.getByLabelText('Password'));
+  assert.equal(rtl.screen.queryByLabelText('API Key'), null);
 });
 
-test('a fresh sign-in with a role-less validate response still degrades to viewer', async () => {
-  validateBody = { valid: true };
+test('a fresh sign-in stores the minted key and role without an extra /auth/validate', async () => {
   rtl.render(createElement(App));
 
-  await signIn('fresh-key');
+  await signIn('miracle@ptamgirimenang.com', 'correct horse battery');
 
-  assert.equal(validateCallCount(), 1);
+  // The login response already carries the role; the startup re-validation effect must not re-fire
+  // on the null→key transition that storing the fresh key causes.
+  assert.equal(loginCallCount(), 1);
+  assert.equal(validateCallCount(), 0);
+  assert.equal(localStorage.getItem(ROLE_KEY), 'operator');
+  assert.equal(sessionStorage.getItem(LOGIN_KEY), 'minted-key');
+});
+
+test('a fresh sign-in with a role-less login response still degrades to viewer', async () => {
+  loginBody = { apiKey: 'minted-key' };
+  rtl.render(createElement(App));
+
+  await signIn('miracle@ptamgirimenang.com', 'correct horse battery');
+
   assert.equal(localStorage.getItem(ROLE_KEY), 'viewer');
 });
 
-test('a page reload with a saved key re-validates once at startup and refreshes the cached role', async () => {
+test('a page reload with a saved dashboard key re-validates once at startup and refreshes the cached role', async () => {
   sessionStorage.setItem(LOGIN_KEY, 'saved-key');
   localStorage.setItem(ROLE_KEY, 'viewer'); // stale cached role
-  validateBody = { valid: true, role: 'admin' };
+  validateBody = { valid: true, role: 'admin', dashboardSession: true };
   rtl.render(createElement(App));
 
   await rtl.waitFor(() => assert.equal(localStorage.getItem(ROLE_KEY), 'admin'));
   await new Promise(resolve => setTimeout(resolve, 50));
 
   assert.equal(validateCallCount(), 1);
+});
+
+test('a page reload with a plain API key (not a dashboard login) is signed out', async () => {
+  sessionStorage.setItem(LOGIN_KEY, 'integration-key');
+  localStorage.setItem(ROLE_KEY, 'admin');
+  validateBody = { valid: true, role: 'admin', dashboardSession: false };
+  rtl.render(createElement(App));
+
+  await rtl.waitFor(() => assert.equal(sessionStorage.getItem(LOGIN_KEY), null));
+  await rtl.screen.findByLabelText('Email');
 });

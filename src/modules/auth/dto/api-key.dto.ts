@@ -105,6 +105,16 @@ export class ValidateApiKeyResponseDto {
 
   @ApiPropertyOptional({ enum: ApiKeyRole, description: "The key's role; present only when valid." })
   role?: ApiKeyRole;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the key was minted by a dashboard email/password login. The dashboard refuses any key ' +
+      'where this is not true, so an integration API key cannot be used to sign in to it.',
+  })
+  dashboardSession?: boolean;
+
+  @ApiPropertyOptional({ description: 'The signed-in email; present only for a dashboard login key.' })
+  email?: string;
 }
 
 export class UpdateApiKeyDto {

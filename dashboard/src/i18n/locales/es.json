@@ -189,7 +189,17 @@
     "viewDocs": "Ver documentación",
     "requestApiKey": "¿No tienes una clave de API? Solicítala",
     "forgotApiKey": "¿Perdiste tu clave de API? Recupérala",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Correo electrónico",
+    "emailPlaceholder": "usted@ptamgirimenang.com",
+    "password": "Contraseña",
+    "passwordPlaceholder": "Introduzca su contraseña",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "credentialsRequired": "El correo y la contraseña son obligatorios",
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión...",
+    "forgotPassword": "¿Olvidó su contraseña o es su primer acceso?"
   },
   "requestApiKey": {
     "title": "Solicitar una clave de API",
@@ -234,6 +244,29 @@
     "successBodyRevoked_one": "Tu clave anterior ha sido desactivada. Copia la nueva ahora — no se volverá a mostrar.",
     "successBodyRevoked_other": "Tus {{count}} claves anteriores han sido desactivadas. Copia la nueva ahora — no se volverá a mostrar.",
     "successBodyNoneRevoked": "Cópiala ahora — no se volverá a mostrar."
+  },
+  "forgotPassword": {
+    "title": "Establecer o restablecer la contraseña",
+    "subtitle": "Introduzca el correo de su cuenta y le enviaremos un enlace para establecer una nueva contraseña.",
+    "emailRequired": "El correo es obligatorio",
+    "submit": "Enviar enlace",
+    "submitting": "Enviando...",
+    "submittedTitle": "Revise su correo",
+    "submittedBody": "Si {{email}} tiene una cuenta del panel, recibirá un enlace para establecer su contraseña.",
+    "backToLogin": "Volver al inicio de sesión"
+  },
+  "resetPassword": {
+    "title": "Establecer una nueva contraseña",
+    "subtitle": "Elija una contraseña de al menos {{min}} caracteres.",
+    "newPassword": "Nueva contraseña",
+    "confirmPassword": "Confirmar nueva contraseña",
+    "tooShort": "La contraseña debe tener al menos {{min}} caracteres",
+    "mismatch": "Las contraseñas no coinciden",
+    "submit": "Guardar contraseña",
+    "submitting": "Guardando...",
+    "doneTitle": "Contraseña guardada",
+    "doneBody": "Ya puede iniciar sesión con su nueva contraseña.",
+    "missingToken": "A este enlace le falta el token. Solicite uno nuevo desde la página de inicio de sesión."
   },
   "dashboard": {
     "title": "Panel",

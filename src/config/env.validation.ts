@@ -1,4 +1,5 @@
 import { resolve } from 'path';
+import { parseDashboardUsers } from '../modules/auth/dashboard-users';
 
 type EnvConfig = Record<string, unknown>;
 
@@ -485,6 +486,20 @@ export function validateEnv(config: EnvConfig): EnvConfig {
   // this guard, turning the flag on with any of those missing would boot fine and then either throw
   // on the first request (SMTP_HOST/SMTP_FROM missing, see MailService) or silently issue keys to
   // every email address on the internet (no allow-list) or email a broken localhost link (no URL).
+  // DASHBOARD_USERS is the only way to get a dashboard account; a typo there would otherwise surface
+  // as a user who silently cannot sign in.
+  try {
+    parseDashboardUsers(str('DASHBOARD_USERS'));
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : String(err));
+  }
+  for (const key of ['DASHBOARD_SESSION_TTL_HOURS', 'DASHBOARD_PASSWORD_RESET_TTL_MINUTES']) {
+    const value = str(key);
+    if (value !== undefined && !/^[1-9][0-9]*$/.test(value)) {
+      errors.push(`${key} must be a positive whole number (got "${value}")`);
+    }
+  }
+
   if (str('SELF_SERVICE_API_KEYS_ENABLED') === 'true') {
     if (!str('SMTP_HOST')) {
       errors.push('SMTP_HOST is required when SELF_SERVICE_API_KEYS_ENABLED=true');
