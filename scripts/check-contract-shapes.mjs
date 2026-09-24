@@ -44,6 +44,7 @@
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Resolve from the script's own location, not process.cwd() — same reason check-sdk-coverage.mjs
@@ -134,6 +135,7 @@ const MAPPINGS = {
     UpsertContactRequest: 'UpsertContactDto',
     UpsertLabelRequest: 'UpsertLabelDto',
     VotePollRequest: 'VotePollDto',
+    WebhookDeliveryFailure: 'WebhookDeliveryFailureDto',
     WebhookFilterCondition: 'WebhookFilterConditionDto',
     WebhookResponse: 'WebhookResponseDto',
   },
@@ -169,11 +171,11 @@ const MAPPINGS = {
  * these floors as pairs are added makes the shrink loud.
  */
 const MINIMUM_MAPPED = {
-  'sdk/javascript/src/types.ts': 82,
+  'sdk/javascript/src/types.ts': 83,
   'dashboard/src/services/api.ts': 21,
-  'sdk/python/openwa/types.py': 77,
-  'sdk/go': 78,
-  'sdk/java': 82,
+  'sdk/python/openwa/types.py': 79,
+  'sdk/go': 79,
+  'sdk/java': 83,
 };
 
 /** Known drift, deliberately not gated yet — each line is a to-adjudicate follow-up. */
@@ -219,6 +221,7 @@ const PYTHON_MAPPING = {
   BulkMessageItem: 'BulkMessageItemDto',
   BulkMessageResponse: 'BulkMessageResponseDto',
   CallLinkResponse: 'CallLinkResponseDto',
+  ChatHistoryMessage: 'ChatHistoryMessageDto',
   ChatSummary: 'ChatSummaryDto',
   CreateCallLinkRequest: 'CreateCallLinkDto',
   CreateChannelRequest: 'CreateChannelDto',
@@ -285,6 +288,7 @@ const PYTHON_MAPPING = {
   UpsertContactRequest: 'UpsertContactDto',
   UpsertLabelRequest: 'UpsertLabelDto',
   VotePollRequest: 'VotePollDto',
+  WebhookDeliveryFailure: 'WebhookDeliveryFailureDto',
   WebhookResponse: 'WebhookResponseDto',
 };
 
@@ -367,6 +371,7 @@ const GO_MAPPING = {
   UpsertContactRequest: 'UpsertContactDto',
   UpsertLabelRequest: 'UpsertLabelDto',
   VotePollRequest: 'VotePollDto',
+  WebhookDeliveryFailure: 'WebhookDeliveryFailureDto',
   WebhookResponse: 'WebhookResponseDto',
 };
 
@@ -453,6 +458,7 @@ const JAVA_MAPPING = {
   UpsertContactRequest: 'UpsertContactDto',
   UpsertLabelRequest: 'UpsertLabelDto',
   VotePollRequest: 'VotePollDto',
+  WebhookDeliveryFailure: 'WebhookDeliveryFailureDto',
   WebhookResponse: 'WebhookResponseDto',
 };
 
@@ -1068,7 +1074,11 @@ export function parseJavaTypes(sources) {
 
 // ── CLI driver ──
 
-const isDirectRun = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop());
+// Resolved-path comparison, not a basename match: splitting on `/` finds no separator in a Windows
+// path so the whole native path became the "basename" and never matched, and a bare `endsWith` on a
+// basename would also fire for any other script sharing this file's name. Same comparison as
+// check-sdk-docs.mjs and check-upstream-surface.mjs.
+const isDirectRun = Boolean(process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url));
 if (isDirectRun) {
   const openapi = JSON.parse(readFileSync(`${REPO_ROOT}openapi.json`, 'utf8'));
   const schemas = openapi.components.schemas;

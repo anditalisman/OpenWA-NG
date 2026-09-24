@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { ContactService } from './contact.service';
-import { RequireRole } from '../auth/decorators/auth.decorators';
+import { ChatScoped, RequireRole } from '../auth/decorators/auth.decorators';
 import { ApiKeyRole } from '../auth/entities/api-key.entity';
 import { UpsertContactDto } from './dto/upsert-contact.dto';
 import {
@@ -104,6 +104,7 @@ export class ContactController {
     return this.contactService.getBlockedContacts(sessionId);
   }
 
+  @ChatScoped('fenced')
   @Get(':contactId')
   @ApiOperation({ summary: 'Get a specific contact by ID' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -115,6 +116,14 @@ export class ContactController {
   })
   @ApiResponse({ status: 404, description: 'Contact not found' })
   @ApiResponse({ status: 409, description: ENGINE_NOT_READY_409 })
+  @ApiResponse({
+    status: 503,
+    description:
+      'The whatsapp-web.js page connection died mid-read, or WhatsApp Web did not answer within the ' +
+      'protocol timeout, so the lookup could not reach an answer. Distinct from the `404` above, which ' +
+      'asserts the contact does not exist: this one asserts nothing about the contact. Retry once the ' +
+      'session is ready again.',
+  })
   async findOne(@Param('sessionId') sessionId: string, @Param('contactId') contactId: string) {
     return this.contactService.getContactById(sessionId, contactId);
   }
@@ -188,6 +197,7 @@ export class ContactController {
 
   // ========== Gap Quick Wins: Profile Picture, Block/Unblock ==========
 
+  @ChatScoped('fenced')
   @Get(':contactId/profile-picture')
   @ApiOperation({ summary: 'Get profile picture URL for a contact' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -209,6 +219,7 @@ export class ContactController {
     return { url };
   }
 
+  @ChatScoped('fenced')
   @Get(':contactId/phone')
   @ApiOperation({ summary: 'Resolve a contact id (e.g. an @lid) to a phone number — best-effort' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -224,6 +235,7 @@ export class ContactController {
     return { contactId, phone };
   }
 
+  @ChatScoped('fenced')
   @Put(':contactId')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -250,6 +262,7 @@ export class ContactController {
 
   // Two path segments on the sibling route (`:contactId/block`) keep this single-segment DELETE
   // from shadowing the unblock route, whichever order they are declared in.
+  @ChatScoped('fenced')
   @Delete(':contactId')
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: "Remove a contact from the account's addressbook" })
@@ -269,6 +282,7 @@ export class ContactController {
     return { success: true, message: 'Contact deleted' };
   }
 
+  @ChatScoped('fenced')
   @Post(':contactId/block')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -292,6 +306,7 @@ export class ContactController {
     return { success: true, message: 'Contact blocked' };
   }
 
+  @ChatScoped('fenced')
   @Delete(':contactId/block')
   @RequireRole(ApiKeyRole.OPERATOR)
   @ApiOperation({ summary: 'Unblock a contact' })

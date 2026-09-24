@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { SessionService } from './session.service';
@@ -41,11 +42,23 @@ import {
 } from './dto';
 import { Session } from './entities/session.entity';
 import { ChatSummary } from '../../engine/interfaces/whatsapp-engine.interface';
+import { paginate } from '../../common/utils/paginate';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/entities/audit-log.entity';
-import { RequireRole, CurrentApiKey, SessionScoped, RequireUnscopedKey } from '../auth/decorators/auth.decorators';
+import {
+  ChatScoped,
+  CurrentApiKey,
+  RequireRole,
+  RequireUnscopedKey,
+  SessionScoped,
+} from '../auth/decorators/auth.decorators';
+import { ChatScopeService } from '../auth/chat-scope.service';
 import { ApiKey, ApiKeyRole } from '../auth/entities/api-key.entity';
-import { ENGINE_NOT_READY_409, PAIRING_NOT_READY_409 } from '../../common/openapi/engine-status-responses';
+import {
+  ENGINE_NOT_READY_409,
+  PAIRING_NOT_READY_409,
+  PAIRING_TRANSPORT_503,
+} from '../../common/openapi/engine-status-responses';
 
 @ApiTags('sessions')
 @Controller('sessions')
@@ -56,6 +69,7 @@ export class SessionController {
   constructor(
     private readonly sessionService: SessionService,
     private readonly auditService: AuditService,
+    private readonly chatScope: ChatScopeService,
   ) {}
 
   private transformSession(session: Session): SessionResponseDto {
@@ -95,21 +109,37 @@ export class SessionController {
   })
   @ApiQuery({ name: 'limit', required: false, description: 'Max sessions to return (1-1000, default 1000)' })
   @ApiQuery({ name: 'offset', required: false, description: 'Number of sessions to skip (for paging)' })
+  @ApiQuery({
+    name: 'name',
+    required: false,
+    type: String,
+    description:
+      'Return only the session with exactly this name (case-sensitive); no match returns an empty array. ' +
+      'An empty value or a repeated key is rejected with 400.',
+  })
   async findAll(
     @CurrentApiKey() apiKey?: ApiKey,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
+    @Query('name') name?: string | string[],
   ): Promise<SessionResponseDto[]> {
+    // ?name=a&name=b arrives as an array and ?name= as ''; neither names one session, and silently
+    // dropping the filter would hand back every session instead.
+    if (Array.isArray(name) || name === '') {
+      throw new BadRequestException('name must be a single non-empty value');
+    }
     // Scope to the key's *effective* session list (AuthService.validateApiKey): null (ADMIN only)
     // lists every session; a non-admin key gets its explicit allowedSessions, or — if unscoped —
     // just the sessions it created itself.
     const sessions = await this.sessionService.findAll(apiKey?.effectiveAllowedSessions, {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
+      name,
     });
     return sessions.map(s => this.transformSession(s));
   }
 
+  @ChatScoped('agnostic')
   @Get(':sessionId')
   @ApiOperation({ summary: 'Get session by ID' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -425,6 +455,7 @@ export class SessionController {
   @ApiResponse({ status: 400, description: 'Session not started or already authenticated' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   @ApiResponse({ status: 409, description: PAIRING_NOT_READY_409 })
+  @ApiResponse({ status: 503, description: PAIRING_TRANSPORT_503 })
   async requestPairingCode(
     @Param('sessionId', ParseUUIDPipe) id: string,
     @Body() dto: RequestPairingCodeDto,
@@ -465,6 +496,7 @@ export class SessionController {
     });
   }
 
+  @ChatScoped('filtered')
   @Get(':sessionId/chats')
   @ApiOperation({ summary: 'Get active chats for a session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -482,15 +514,18 @@ export class SessionController {
   @ApiQuery({ name: 'offset', required: false, description: 'Number of chats to skip (for paging)' })
   async getChats(
     @Param('sessionId', ParseUUIDPipe) id: string,
+    @CurrentApiKey() apiKey?: ApiKey,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ): Promise<ChatSummary[]> {
-    return this.sessionService.getChats(id, {
-      limit: limit ? parseInt(limit, 10) : undefined,
-      offset: offset ? parseInt(offset, 10) : undefined,
-    });
+    // This route is admitted to a chat-restricted key because it FILTERS to the key's chats rather
+    // than naming one in the path. Filter BEFORE paginating: filtering the page instead would give a
+    // restricted key a short or empty window while an allowed chat sat just past it.
+    const visible = await this.chatScope.filter(apiKey, await this.sessionService.listChats(id), chat => chat.id);
+    return paginate(visible, limit ? parseInt(limit, 10) : undefined, offset ? parseInt(offset, 10) : undefined);
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/read')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -522,6 +557,7 @@ export class SessionController {
     return { success };
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/presence/subscribe')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -580,6 +616,7 @@ export class SessionController {
     return { success: true };
   }
 
+  @ChatScoped('fenced')
   @Get(':sessionId/presence/:chatId')
   @RequireRole(ApiKeyRole.VIEWER)
   @ApiOperation({
@@ -604,6 +641,7 @@ export class SessionController {
     return presence ? { ...presence, observedAt: new Date(presence.observedAt) } : null;
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/unread')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -627,6 +665,7 @@ export class SessionController {
     return { success };
   }
 
+  @ChatScoped('fenced')
   @Delete(':sessionId/chats/:chatId/messages')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -657,6 +696,7 @@ export class SessionController {
     return { success };
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/archive')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -686,6 +726,7 @@ export class SessionController {
     return { success };
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/mute')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -722,6 +763,7 @@ export class SessionController {
     return { success: true };
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/pin')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -756,6 +798,7 @@ export class SessionController {
     return { success };
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/delete')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)
@@ -779,6 +822,7 @@ export class SessionController {
     return { success };
   }
 
+  @ChatScoped('fenced')
   @Post(':sessionId/chats/typing')
   @RequireRole(ApiKeyRole.OPERATOR)
   @HttpCode(HttpStatus.OK)

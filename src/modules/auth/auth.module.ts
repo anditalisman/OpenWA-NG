@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { ApiKeyUsageTracker } from './api-key-usage-tracker.service';
 import { SelfServiceApiKeyService } from './self-service-api-key.service';
 import { RecaptchaService } from './recaptcha.service';
+import { ChatScopeService } from './chat-scope.service';
 import { AuthController } from './auth.controller';
 import { AuthValidateController } from './auth-validate.controller';
 import { SelfServiceApiKeyController } from './self-service-api-key.controller';
@@ -30,6 +31,7 @@ import { ProxyAwareThrottlerGuard } from '../../common/security/proxy-aware-thro
     ApiKeyUsageTracker,
     SelfServiceApiKeyService,
     RecaptchaService,
+    ChatScopeService,
     {
       provide: APP_GUARD,
       useClass: ProxyAwareThrottlerGuard,
@@ -39,6 +41,6 @@ import { ProxyAwareThrottlerGuard } from '../../common/security/proxy-aware-thro
       useClass: ApiKeyGuard,
     },
   ],
-  exports: [AuthService],
+  exports: [AuthService, ChatScopeService],
 })
 export class AuthModule {}

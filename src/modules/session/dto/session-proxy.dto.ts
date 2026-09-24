@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, MaxLength, IsUrl } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength, Validate } from 'class-validator';
+import { HasDecodableProxyCredentialsConstraint } from './has-decodable-proxy-credentials.validator';
 import type { Session } from '../entities/session.entity';
 
 export type SessionProxyType = 'http' | 'https' | 'socks4' | 'socks5';
@@ -20,8 +21,12 @@ export class SessionProxyResponseDto {
   enabled!: boolean;
 
   @ApiProperty({
-    description: 'Proxy protocol derived from the stored URL scheme',
-    enum: ['http', 'https', 'socks4', 'socks5'],
+    description: 'Proxy protocol derived from the stored URL scheme; `null` when no proxy is set',
+    // `null` is IN the enum on purpose. This is an OpenAPI 3.0 document, where `nullable: true`
+    // does not widen an enum: a strict validator checks the value against the list and rejects
+    // `null` for not being on it. Every session without a proxy answers exactly that, so the most
+    // ordinary response on this route contradicted its own schema.
+    enum: ['http', 'https', 'socks4', 'socks5', null],
     nullable: true,
     example: 'http',
   })
@@ -66,6 +71,7 @@ export class UpdateSessionProxyDto {
     },
     { message: 'proxyUrl must be a valid http(s)/socks4/socks5 URL' },
   )
+  @Validate(HasDecodableProxyCredentialsConstraint)
   proxyUrl?: string | null;
 }
 

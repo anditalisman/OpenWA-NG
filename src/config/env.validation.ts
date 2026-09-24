@@ -42,6 +42,20 @@ export function sqliteDataMainPathCollision(config: EnvConfig): string | null {
 }
 
 /**
+ * POSTGRES_SCHEMA rule shared by boot validation and the Infrastructure save path: a legal,
+ * non-reserved, lower-case Postgres identifier. Returns the error message, or null when valid.
+ */
+export function postgresSchemaError(schema: string): string | null {
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(schema)) {
+    return `POSTGRES_SCHEMA must be a valid lower-case Postgres identifier (a lower-case letter or underscore, then lower-case letters/digits/underscores, max 63 chars; got ${JSON.stringify(schema)})`;
+  }
+  if (schema.startsWith('pg_')) {
+    return `POSTGRES_SCHEMA must not use the reserved "pg_" prefix (got ${JSON.stringify(schema)})`;
+  }
+  return null;
+}
+
+/**
  * Fail-fast environment validation. Wired as ConfigModule's `validate`
  * callback so a misconfigured deployment is rejected at BOOT instead of silently
  * coercing (e.g. a `DATABASE_TYPE=postgre` typo falling back to SQLite) or failing on
@@ -115,15 +129,14 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     // POSTGRES_SCHEMA is optional (defaults to 'public' in configuration.ts). When set, validate it
     // is a legal, non-reserved Postgres identifier so a typo / injection-ish value fails fast at boot
     // rather than reaching CREATE TABLE "<schema>"."..." (or a search_path SET) at migration time.
-    const pgSchema = str('POSTGRES_SCHEMA');
-    if (pgSchema !== undefined) {
-      if (!/^[A-Za-z_][A-Za-z0-9_]{0,62}$/.test(pgSchema)) {
-        errors.push(
-          `POSTGRES_SCHEMA must be a valid Postgres identifier (a letter or underscore, then letters/digits/underscores, max 63 chars; got ${JSON.stringify(pgSchema)})`,
-        );
-      } else if (pgSchema.toLowerCase().startsWith('pg_')) {
-        errors.push(`POSTGRES_SCHEMA must not use the reserved "pg_" prefix (got ${JSON.stringify(pgSchema)})`);
-      }
+    // Lower case only: the search_path startup option is unquoted, so Postgres folds it to lower
+    // case, while TypeORM quotes the schema. A mixed-case name would split DDL and queries across
+    // two schemas. The raw value is checked, untrimmed: the app and the migration CLI both use it
+    // as set, so a padded (or whitespace-only) value must fail here as it fails in the CLI.
+    const pgSchema = config.POSTGRES_SCHEMA;
+    const pgSchemaError = typeof pgSchema === 'string' && pgSchema !== '' ? postgresSchemaError(pgSchema) : null;
+    if (pgSchemaError) {
+      errors.push(pgSchemaError);
     }
   } else {
     // SQLite (explicit or default): DATABASE_NAME is a file path for the 'data' connection. It must
@@ -294,6 +307,17 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     // Positive-only is the POINT here, not a convention: 0 arms no Puppeteer timer at all, so a
     // wedged renderer holds the request forever (see wwebjs-lifecycle.ts).
     'PUPPETEER_PROTOCOL_TIMEOUT_MS',
+    // The media knobs take RAW numbers while their neighbours in .env.example and docs/12 take unit
+    // strings (`BODY_SIZE_LIMIT=25mb`), and their read sites parse with `Number.parseInt`. That
+    // accepts the leading digits of a unit-suffixed value and discards the unit, so
+    // `MEDIA_DOWNLOAD_MAX_BYTES=50mb` became a 50 BYTE cap and `MEDIA_DOWNLOAD_TIMEOUT_MS=30s`
+    // became 30 ms: every download fails, and the "garbage falls back to the default" the helpers
+    // promise never fires because 50 is a perfectly good positive integer. Reject at boot instead,
+    // which is what the two inline-media budgets below already do.
+    'MEDIA_DOWNLOAD_MAX_BYTES',
+    'MEDIA_DOWNLOAD_TIMEOUT_MS',
+    'INBOUND_MEDIA_CONCURRENCY',
+    'CHAT_HISTORY_MEDIA_BUDGET_BYTES',
   ]) {
     checkPositiveInt(key);
   }
@@ -413,6 +437,12 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     // the webhook payload an integrator receives is not the one the operator configured.
     'WEBHOOK_SSRF_PROTECT',
     'WEBHOOK_CONTACT_DETAILS',
+    // `!== 'false'`: a typo keeps caller-supplied URL fetches on the session proxy, the safe value,
+    // but an operator whose proxy cannot reach arbitrary media hosts asked for the opposite and
+    // would see every send-by-URL on a proxied session fail instead.
+    'SESSION_PROXY_URL_FETCH',
+    // `=== 'false'`: a typo leaves the outbound release check on when the operator asked for it off.
+    'UPDATE_CHECK_ENABLED',
     // Engine behaviour flags: a typo leaves full-history sync off, or leaves the account marked
     // online on connect (#871 — it suppresses notifications on the operator's own phone).
     'BAILEYS_SYNC_FULL_HISTORY',
@@ -525,6 +555,20 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     if (!Number.isFinite(n) || n < 0 || n > 1) {
       errors.push(`RECAPTCHA_MIN_SCORE must be a number between 0 and 1 (got "${recaptchaMinScore}")`);
     }
+  }
+
+  // LOG_LEVEL is read in main.ts by exact match after trim+toLowerCase, so any casing works today
+  // and only a MISSPELLING differs: every unrecognised value silently means INFO, which is MORE
+  // logging than the operator asked for (Nest-adjacent spellings like 'log', 'trace' or 'fatal'
+  // included, none of them this repo's vocabulary). Validate the normalised form, mirroring the
+  // read site exactly (same philosophy as MEDIA_DOWNLOAD_ENABLED above): nothing that works today
+  // is refused, and a misspelling fails the boot instead of quietly logging at info.
+  const LOG_LEVEL_VALUES = ['error', 'warn', 'info', 'debug', 'verbose'];
+  const rawLogLevel = str('LOG_LEVEL');
+  if (rawLogLevel !== undefined && !LOG_LEVEL_VALUES.includes(rawLogLevel.toLowerCase())) {
+    errors.push(
+      `LOG_LEVEL must be one of ${LOG_LEVEL_VALUES.map(v => `"${v}"`).join(', ')} (got ${JSON.stringify(rawLogLevel)})`,
+    );
   }
 
   if (errors.length > 0) {
