@@ -11,6 +11,7 @@ import { EngineEventCallbacks, EngineStatus } from '../interfaces/whatsapp-engin
 import { EngineNotReadyError } from '../../common/errors/engine-not-ready.error';
 import { type createLogger } from '../../common/services/logger.service';
 import { BaileysAdapterConfig } from '../types/baileys.types';
+import { useAtomicMultiFileAuthState } from './baileys-auth-store';
 import { createBaileysLogger } from './baileys-logger';
 import { BaileysVersionResolver } from './baileys-version-resolver';
 import { unappliedPatches, unappliedPatchesMessage } from './engine-patch-status';
@@ -198,7 +199,7 @@ export class BaileysLifecycle {
       this.host.logger.log(`Using proxy: ${protocol}//${host}`, { sessionId: this.host.config.sessionId });
     }
     const b = await this.loadLib();
-    const { state, saveCreds } = await b.useMultiFileAuthState(this.host.authPath);
+    const { state, saveCreds } = await useAtomicMultiFileAuthState(this.host.authPath, b, this.host.logger);
     const version = await this.versionResolver.resolve(b, { dispatcher: proxyAgent });
     // BaileysLogger matches ILogger exactly; cast needed because the module resolves the type
     // through a deep import path that TypeScript does not auto-unify here. Shared by the key
