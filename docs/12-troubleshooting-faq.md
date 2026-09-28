@@ -307,6 +307,15 @@ from that registry and pins its HTML — note this HTML is fetched from a third-
 executed inside the `web.whatsapp.com` origin without an integrity check. Set
 `WWEBJS_WEB_VERSION=off` to disable pinning and use the first-party build served by WhatsApp.
 
+If the session is still `authenticating` 90 s after the link, OpenWA stops waiting. If WhatsApp Web
+reports the session connected but its event bridge never attached, the session is marked `failed` with
+the credentials kept (action `ready_reconcile_bridge_dead`), whether it was linked in that start or
+restored: restart it to relaunch the browser. Otherwise, a session linked by a QR or pairing code in
+that start has its saved credentials cleared once and comes back with a fresh QR. A session restored
+from saved credentials is marked `failed` with the credentials kept (action
+`ready_reconcile_timeout_restored`): restart it; to pair again, delete it (which clears the saved
+credentials) and create it anew; or pin `WWEBJS_WEB_VERSION`.
+
 ### Issue: QR generation times out on slow first boot (WSL2 / low-resource)
 
 > **Engine:** This issue applies to the `whatsapp-web.js` engine only. If you are using `ENGINE_TYPE=baileys`, skip this section.
