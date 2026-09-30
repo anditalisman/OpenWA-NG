@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { ChatLabelsUnsupportedError } from '../../common/errors/chat-labels-unsupported.error';
+import { EngineNotReadyError } from '../../common/errors/engine-not-ready.error';
 import { isChannelJid } from '../identity/wa-id';
 import type * as BaileysLib from '@whiskeysockets/baileys';
 import type { WASocket } from '@whiskeysockets/baileys';
@@ -127,7 +128,12 @@ export class BaileysAdapter implements IWhatsAppEngine {
       get connectedAt() {
         return connectedAt();
       },
-      getSocket: () => this.sock!,
+      // Read after a delegate's awaits too, when a stop or logout may have torn the socket down since
+      // its readiness check: that is a not-ready session (409), not a null dereference (500).
+      getSocket: () => {
+        if (!this.sock) throw new EngineNotReadyError();
+        return this.sock;
+      },
       getSocketOrNull: () => this.sock,
       logger: this.logger,
       toNeutralJid: jid => this.sessionStore.toNeutralJid(jid),
