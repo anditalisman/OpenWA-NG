@@ -901,15 +901,30 @@ adapter boundary — none silently stubs.
   `image/webp` on the payload unconditionally and transcodes nothing
   (`prepareWAMessageMedia` → `MIMETYPE_MAP.sticker`), so the adapter converts before the socket:
   WebP passes through byte-identical (preserving its sticker-pack EXIF), other `image/*` input is
-  re-encoded to a 512×512 WebP with animation retained, and everything else — **including
-  `video/*`** — is refused with a `400`. So an animated-video sticker works on wwjs and answers
-  `400` on Baileys. ffmpeg is deliberately not wired in on the Baileys side: the binary ships only
-  in the Docker image, so depending on it would make the same request succeed or fail depending on
-  how the gateway was installed.
-- **`deleteStatus` (baileys).** Marked ✅ (no throw), but the `sendMessage(status@broadcast,
-{delete})` revoke shape is _empirically unverified_ — only posting was live-spiked. May fall back
-  to 501 if WA rejects the shape. On wwjs it calls `revokeStatusMessage(statusId)` (own status
-  only).
+  re-encoded to a 512×512 WebP with animation retained (up to 500 frames; a longer animation is
+  refused with a `400`), and everything else — **including `video/*`** — is refused with a `400`.
+  So an animated-video sticker works on wwjs and answers `400` on Baileys. ffmpeg is deliberately
+  not wired in on the Baileys side: the binary ships only in the Docker image, so depending on it
+  would make the same request succeed or fail depending on how the gateway was installed.
+- **`deleteStatus` (baileys).** Baileys sends a status stanza, the revoke included, to exactly its
+  `statusJidList`, so the revoke is addressed to the recipients the adapter remembered when it posted
+  the status. It keeps them in memory for 24 hours, so a status this session did not post in the last
+  24 hours (one posted from the phone or from another node, or before the session's engine was last
+  created: a process restart, a session stop and start, or a reconnect the gateway runs itself, such
+  as after a failed liveness check) is refused with `403` (`EngineRefusedError`) instead of a revoke
+  that reaches nobody while the status stays up. The transient reconnects Baileys runs on its own keep
+  the same engine, and the list with it.
+  The `sendMessage(status@broadcast, {delete})` revoke shape is _empirically unverified_: only posting
+  was live-spiked. On wwjs it calls `revokeStatusMessage(statusId)` (own status only).
+- **`getChats` after a restart (baileys).** Baileys keeps no chat list of its own, and WhatsApp
+  skips history sync on every connect after the first link, so a new engine (a process restart, a
+  session stop and start, or a reconnect the gateway runs itself, as for `deleteStatus` above) starts
+  with an empty one. `GET /chats` then lists the groups, re-fetched on every connect, and every chat
+  with a persisted archive, pin or mute state (bounded by `BAILEYS_CHAT_STATE_CACHE_MAX`); any other
+  1:1 chat comes back when its next message arrives and stays out of the list until then. Rows
+  rebuilt this way carry timestamp `0` and no `lastMessage` until a message arrives. The transient
+  reconnects Baileys runs on its own keep the list. whatsapp-web.js reads WhatsApp Web's own chat
+  list and is unaffected.
 - **`getContactStatus` / `getContactStatuses` (wwjs).** `Status.type` is the `text|image|video`
   union — audio/other story types collapse to `text`.
 - **`archiveChat` / `clearChatMessages` / `deleteChat` / `sendSeen` / `markUnread` (baileys).** All
