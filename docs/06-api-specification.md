@@ -1900,7 +1900,7 @@ Send a contact card (vCard).
 
 #### POST /api/sessions/:sessionId/messages/send-sticker
 
-Send a sticker (by URL or base64; typically webp). Reuses `SendMediaMessageDto`.
+Send a sticker (by URL or base64; typically webp). Reuses `SendMediaMessageDto`. On Baileys a WebP is sent unchanged and any other `image/*` is converted to a 512x512 WebP first, keeping up to 500 animation frames.
 
 **Auth:** API key (OPERATOR)
 
@@ -1922,7 +1922,7 @@ Send a sticker (by URL or base64; typically webp). Reuses `SendMediaMessageDto`.
 { "messageId": "true_628123456789@c.us_3EB0ABCD", "timestamp": 1719312000 }
 ```
 
-**Errors:** `400` media validation failure / session not active / unknown body field · `401` missing/invalid API key · `403` key role below OPERATOR · `500` engine error · `409` conflict or engine not ready (retryable) · `501` not supported on the active engine
+**Errors:** `400` media validation failure / (Baileys) media that is neither WebP nor an image that converts to one, or an animation with more than 500 frames / session not active / unknown body field · `401` missing/invalid API key · `403` key role below OPERATOR · `500` engine error · `409` conflict or engine not ready (retryable) · `501` not supported on the active engine
 
 #### POST /api/sessions/:sessionId/messages/send-poll
 
