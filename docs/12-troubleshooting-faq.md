@@ -250,6 +250,22 @@ Proxy egress (if WhatsApp is blocked on your network) is configured **per sessio
 unreachable proxy silently blocks the WhatsApp WebSocket (see the _No QR code appears, or `/start`
 returns `504`_ entry below).
 
+### Issue: Phone-number pairing fails with "Couldn't link device" (Baileys)
+
+**Symptoms:**
+
+- `POST /api/sessions/:sessionId/pairing-code` returns a code, but the phone answers "Couldn't link device" after it is entered
+- The engine log then shows a `401` close with `Session disconnected: logged out`, the auth directory is cleared, and the session comes back at `qr_ready` with no phone
+- Linking the same account by QR works
+
+**Cause:** the pairing request carries the linked-device identity, and some accounts reject a
+non-standard one. The default device name is `Ubuntu`; if `BAILEYS_BROWSER_NAME` is set to a custom
+brand, set it back to `Ubuntu` (or another standard OS name like `macOS` or `Windows`),
+restart OpenWA itself (the name is read at boot, so stopping and starting the session is not enough),
+and request a fresh code. The name applies to new pairings only; a session that is already linked
+keeps the name it was paired with until it is re-linked. See the phone-number pairing example in
+`docs/examples/session-phone-number-pairing.md`.
+
 ### Issue: No QR code appears, or `POST /api/sessions/:sessionId/start` returns `504`
 
 **Symptoms:**

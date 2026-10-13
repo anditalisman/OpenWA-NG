@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The Baileys linked-device name defaults to `Ubuntu` instead of `OpenWA`, so phone-number pairing works without setting `BAILEYS_BROWSER_NAME`.
 - A whatsapp-web.js protocol timeout is no longer eligible to be classified as a dead page.
   Behaviour is unchanged on the current Puppeteer; the guard keeps a future bump from reporting a
   slow command as a transport death.
