@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stop delivering whatsapp-web.js system notices (a changed security code, the encryption notice, business and broadcast notices) as `unknown` messages on `message.received` and `message.sent`, so they are no longer stored or passed to the message hooks, and stop announcing `message.ack` for them.
+- Stop storing, listing and announcing (`status.received`) a whatsapp-web.js story that arrives already deleted, live or in the backfill made on connect.
 - Skip a WhatsApp Web build whose registry page is the logged-out landing page and pin the next older settled build instead (up to three are tried, warning `web_version_html_rejected`); every whatsapp-web.js session start on such a build failed with `Cannot read properties of null`. An exact `WWEBJS_WEB_VERSION` is never checked or swapped.
 - A whatsapp-web.js session whose proxy asks for a username and password failed every start after the first with `net::ERR_INVALID_AUTH_CREDENTIALS`, because WhatsApp Web's service worker, registered in the saved profile, took the page's requests out of reach of the proxy login; the page now ignores the service worker for such a session (#819).
 - List a whatsapp-web.js contact held under both its LID and its phone once in the contacts and blocked lists, with the phone as `number`, instead of twice with the LID's digits.

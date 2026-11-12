@@ -1,14 +1,30 @@
-import { type Client, MessageTypes } from 'whatsapp-web.js';
+import { type Client, type Message, MessageTypes } from 'whatsapp-web.js';
 import {
   type IncomingMessage,
   type RevokedMessage,
   type ReactionEvent,
   type EditedMessage,
 } from '../interfaces/whatsapp-engine.interface';
-import { type SerializedWid } from '../types/whatsapp-web-js.types';
+import { readWid, type SerializedWid } from '../types/whatsapp-web-js.types';
 import { buildEditedMessage, buildIncomingMessageBase, mapContactFields } from './message-mapper';
 import { extractWwebjsCall, wwebjsAckToDeliveryStatus } from './wwebjs-messaging';
 import { type WwebjsEngineHost } from './wwebjs-host';
+
+/**
+ * The bubbles WhatsApp Web draws in a chat by itself: a changed security code, the encryption notice, a business or
+ * broadcast notice. When it adds one as a new message, whatsapp-web.js hands it over like any other, though nobody
+ * sent it, so mapped it would reach the session as an `unknown` message no one wrote. `gp2` group notices never get
+ * here (the library turns them into group events), and a `call_log` is a message the history lists, so it stays.
+ */
+const NOTICE_TYPES: ReadonlySet<string> = new Set<string>([
+  MessageTypes.E2E_NOTIFICATION,
+  MessageTypes.NOTIFICATION_TEMPLATE,
+  MessageTypes.NOTIFICATION,
+  MessageTypes.BROADCAST_NOTIFICATION,
+  MessageTypes.GROUP_NOTIFICATION,
+  MessageTypes.PROTOCOL,
+  MessageTypes.DEBUG,
+]);
 
 /**
  * Message-domain client events (message, message_create, ack, revoke, reaction, edit) extracted
@@ -18,8 +34,20 @@ import { type WwebjsEngineHost } from './wwebjs-host';
  * latches this file never touches.
  */
 export function registerWwebjsMessageEvents(client: Client, host: WwebjsEngineHost): void {
+  // Checked before anything is built for the message, so a notice reaches no callback and no page lookup.
+  const isNotice = (msg: Message): boolean => {
+    if (!NOTICE_TYPES.has(msg.type)) return false;
+    host.logger.debug('Dropping a system notice WhatsApp Web drew in a chat', {
+      action: 'wwebjs_drop_notice',
+      msgId: readWid(msg.id),
+      type: msg.type,
+    });
+    return true;
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-misused-promises
   client.on('message', async msg => {
+    if (isNotice(msg)) return;
     try {
       const incomingMessage: IncomingMessage = buildIncomingMessageBase(msg);
 
@@ -95,6 +123,8 @@ export function registerWwebjsMessageEvents(client: Client, host: WwebjsEngineHo
     if (!msg.fromMe) {
       return;
     }
+    // After the gate, so a notice that is not the account's own is dropped, and logged, once: by `message`.
+    if (isNotice(msg)) return;
 
     void (async () => {
       const incomingMessage = buildIncomingMessageBase(msg);
@@ -136,6 +166,8 @@ export function registerWwebjsMessageEvents(client: Client, host: WwebjsEngineHo
       host.logger.warn('Dropping an ack whose message id could not be read', { ack });
       return;
     }
+    // The account's own notice was never handed over as a sent message, so its ack would point at nothing.
+    if (isNotice(msg)) return;
     // Map the whatsapp-web.js MessageAck integer to the neutral DeliveryStatus here, at the
     // adapter boundary, so no downstream consumer ever sees engine-specific ack codes.
     host.getCallbacks().onMessageAck?.(ackId, wwebjsAckToDeliveryStatus(ack));
