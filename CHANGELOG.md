@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Flag the stored copy of a message deleted on whatsapp-web.js by its bare key id as revoked; it stayed in place before because the row is keyed by the serialized id.
 - Queue whatsapp-web.js label writes per chat whichever id names it, and write them to the id WhatsApp Web keys the chat by, so adding two labels to one chat at the same time no longer removes one of them, and a label added by a contact's phone id to a chat keyed by its lid is no longer silently dropped.
 - Report the chat id of a whatsapp-web.js `message.reaction` as a string if WhatsApp Web sends it as an object.
 - Fold a whatsapp-web.js mention given as a padded, upper-case, `@s.whatsapp.net`, `:device` or hosted id to the neutral id before it reaches WhatsApp Web, in text, media, sticker, reply and edit sends, as Baileys already does.

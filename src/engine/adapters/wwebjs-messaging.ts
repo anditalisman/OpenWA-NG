@@ -11,7 +11,7 @@ import {
   PollInput,
   Quotable,
 } from '../interfaces/whatsapp-engine.interface';
-import { MessageWithReactions, SerializedWid } from '../types/whatsapp-web-js.types';
+import { MessageWithReactions, readWid, SerializedWid } from '../types/whatsapp-web-js.types';
 import { BadRequestException, NotImplementedException } from '@nestjs/common';
 import { MessageNotFoundError } from '../../common/errors/message-not-found.error';
 import { EngineRefusedError } from '../../common/errors/engine-refused.error';
@@ -782,7 +782,7 @@ export class WwebjsMessaging {
     return results;
   }
 
-  async deleteMessage(chatId: string, messageId: string, forEveryone: boolean = true): Promise<void> {
+  async deleteMessage(chatId: string, messageId: string, forEveryone: boolean = true): Promise<string | void> {
     this.host.ensureReady();
     // NOTE: do NOT resolve chatId to @lid here — delete operates on the found message's own key, not
     // this chatId, so LID-resolving the lookup gives no benefit and would miss a message stored under
@@ -795,6 +795,9 @@ export class WwebjsMessaging {
     }
     await message.delete(forEveryone);
     this.host.logger.log(`Deleted message ${messageId} from chat ${chatId} (forEveryone: ${forEveryone})`);
+    // The message is found by its serialized id or by the bare key id, but its row is keyed by the serialized one,
+    // which is what the caller needs to clear the stored copy.
+    return readWid(message.id);
   }
 
   async editMessage(chatId: string, messageId: string, body: string, mentions?: string[]): Promise<MessageResult> {
