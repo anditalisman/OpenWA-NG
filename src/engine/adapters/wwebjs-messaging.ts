@@ -16,7 +16,7 @@ import { BadRequestException, NotImplementedException } from '@nestjs/common';
 import { MessageNotFoundError } from '../../common/errors/message-not-found.error';
 import { EngineRefusedError } from '../../common/errors/engine-refused.error';
 import { loadRemoteMediaBuffer } from '../../common/media/load-remote-media';
-import { chatKind, userPart } from '../identity/wa-id';
+import { chatKind, toParticipantWid, userPart } from '../identity/wa-id';
 import { chatHistoryMediaBudgetBytes, coerceDeclaredSize, ingestMediaBudgetBytes } from './inbound-media-cap';
 import { buildIncomingMessageBase } from './message-mapper';
 import { buildVCard } from './vcard';
@@ -183,6 +183,19 @@ export function toMessageResult(msg: Message | undefined): MessageResult {
   }
   const id = msg.id as unknown as SerializedWid | undefined;
   return { id: id?._serialized ?? id?.$1 ?? '', timestamp: msg.timestamp };
+}
+
+/**
+ * The mentions as WhatsApp Web's strict id parser takes them: one neutral id per entry. The send DTOs accept an
+ * individual id in any spelling (padding, upper case, the `s.whatsapp.net` dialect, a `:device` suffix) and hand it
+ * on as typed, and a `message:sending` plugin may rewrite the list after validation. The Baileys adapter folds them
+ * at its boundary and so does this one. A lid stays a lid. Only strings inside a list are folded: anything else a
+ * plugin returns, an entry that is not a string or a list that is not an array, reaches the library as it would have,
+ * rather than becoming a TypeError here.
+ */
+function neutralMentions(mentions: string[]): string[] {
+  if (!Array.isArray(mentions)) return mentions;
+  return mentions.map(mention => (typeof mention === 'string' ? toParticipantWid(mention) : mention));
 }
 
 /**
@@ -360,8 +373,8 @@ export class WwebjsMessaging {
     options?: { linkPreview?: boolean; customPreview?: CustomLinkPreview } & Quotable,
   ): Promise<MessageResult> {
     this.host.ensureReady();
-    // wwebjs accepts neutral `<phone>@c.us` WIDs directly as mentionedJidList, so no de-normalization
-    // is needed. Omit the options object entirely when none are given to keep today's send behavior.
+    // wwebjs takes the neutral `<phone>@c.us` / `<lid>@lid` WIDs as mentionedJidList, so each mention is folded to
+    // that form (neutralMentions). Omit the options object entirely when none are given to keep today's send behavior.
     //
     // Only an explicit `false` is forwarded. whatsapp-web.js reads the flag as
     // `linkPreview === false ? undefined : true` (Client.js:1458), so passing `true` is identical to
@@ -379,7 +392,7 @@ export class WwebjsMessaging {
       quotedMessageId?: string;
       ignoreQuoteErrors?: boolean;
     } = this.quoteOptions(options?.quotedMessageId);
-    if (mentions?.length) sendOptions.mentions = mentions;
+    if (mentions?.length) sendOptions.mentions = neutralMentions(mentions);
     if (options?.linkPreview === false) sendOptions.linkPreview = false;
 
     const msg = await this.sendResolved(
@@ -443,7 +456,7 @@ export class WwebjsMessaging {
       to =>
         this.client().sendMessage(to, messageMedia, {
           caption: media.caption,
-          ...(media.mentions?.length ? { mentions: media.mentions } : {}),
+          ...(media.mentions?.length ? { mentions: neutralMentions(media.mentions) } : {}),
           // sendAudioAsVoice only for audio, sendMediaAsDocument only for documents;
           // {...undefined} contributes no keys.
           ...extraOptions,
@@ -512,7 +525,7 @@ export class WwebjsMessaging {
           ...this.quoteOptions(media.quotedMessageId),
           // Same options bag every other media send uses, so the library tags a sticker exactly as it
           // tags an image. Omitted when empty to leave an untagged sticker call unchanged.
-          ...(media.mentions?.length ? { mentions: media.mentions } : {}),
+          ...(media.mentions?.length ? { mentions: neutralMentions(media.mentions) } : {}),
         }),
       media.quotedMessageId,
     );
@@ -567,7 +580,9 @@ export class WwebjsMessaging {
       // no tags were asked for, keeping an ordinary reply's call shape untouched (same rule as the
       // send path).
       const msg = await this.sendResolved(chatId, to =>
-        mentions?.length ? quotedMsg.reply(text, to, { mentions }) : quotedMsg.reply(text, to),
+        mentions?.length
+          ? quotedMsg.reply(text, to, { mentions: neutralMentions(mentions) })
+          : quotedMsg.reply(text, to),
       );
       return toMessageResult(msg);
     } catch (error) {
@@ -801,7 +816,9 @@ export class WwebjsMessaging {
     }
     // An edit REPLACES the content, so tags are re-applied rather than preserved: omitting mentions
     // drops whatever the original carried. Options omitted entirely when none were asked for.
-    const edited = mentions?.length ? await message.edit(body, { mentions }) : await message.edit(body);
+    const edited = mentions?.length
+      ? await message.edit(body, { mentions: neutralMentions(mentions) })
+      : await message.edit(body);
     if (!edited) {
       // wwebjs RESOLVES null (instead of throwing) when the page-side edit is refused — only the
       // account's own text messages are editable; surface the refusal, not a phantom success.
