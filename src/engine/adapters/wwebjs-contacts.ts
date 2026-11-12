@@ -189,7 +189,9 @@ export class WwebjsContacts {
     this.host.ensureReady();
     try {
       const contacts = await this.client().getBlockedContacts();
-      const ids = contacts.map(c => readWid(c.id as unknown as SerializedWid)).filter((id): id is string => Boolean(id));
+      const ids = contacts
+        .map(c => readWid(c.id as unknown as SerializedWid))
+        .filter((id): id is string => Boolean(id));
       return [...new Set(ids)];
     } catch (error) {
       this.host.reportIfPageTransportError(error, 'getBlockedContacts');
