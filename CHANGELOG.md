@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Report the chat id of a whatsapp-web.js `message.reaction` as a string if WhatsApp Web sends it as an object.
 - Fold a whatsapp-web.js mention given as a padded, upper-case, `@s.whatsapp.net`, `:device` or hosted id to the neutral id before it reaches WhatsApp Web, in text, media, sticker, reply and edit sends, as Baileys already does.
 - Reduce a group participant id to its neutral form before it reaches the engine, so `628123:3@c.us` or `628123@C.US` no longer reports a real member as not a member.
 - Stop delivering whatsapp-web.js system notices (a changed security code, the encryption notice, business and broadcast notices) as `unknown` messages on `message.received` and `message.sent`, so they are no longer stored or passed to the message hooks, and stop announcing `message.ack` for them.

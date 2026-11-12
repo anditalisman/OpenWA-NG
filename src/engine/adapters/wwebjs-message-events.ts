@@ -221,7 +221,9 @@ export function registerWwebjsMessageEvents(client: Client, host: WwebjsEngineHo
       const msgId = reaction.msgId as unknown as SerializedWid;
       const event: ReactionEvent = {
         messageId: msgId?._serialized ?? msgId?.$1 ?? '',
-        chatId: reaction.id.remote,
+        // `remote` is the chat. Read it like every other id here: it may be a Wid object rather than a string, and an
+        // unreadable one is the empty string, which the stored-row checks take as no information.
+        chatId: readWid(reaction.id.remote as unknown as SerializedWid) ?? '',
         reaction: reaction.reaction,
         senderId: reaction.senderId,
       };
