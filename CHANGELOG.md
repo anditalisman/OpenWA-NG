@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Log the page visibility, the H.264/AAC playback answer and the browser version when a whatsapp-web.js video send or video status post times out in WhatsApp Web's 20 second video load (`video_load_timeout`).
 - The Baileys linked-device name defaults to `Ubuntu` instead of `OpenWA`, so phone-number pairing works without setting `BAILEYS_BROWSER_NAME`.
 - A whatsapp-web.js protocol timeout is no longer eligible to be classified as a dead page.
   Behaviour is unchanged on the current Puppeteer; the guard keeps a future bump from reporting a
