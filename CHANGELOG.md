@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Queue whatsapp-web.js label writes per chat whichever id names it, and write them to the id WhatsApp Web keys the chat by, so adding two labels to one chat at the same time no longer removes one of them, and a label added by a contact's phone id to a chat keyed by its lid is no longer silently dropped.
 - Report the chat id of a whatsapp-web.js `message.reaction` as a string if WhatsApp Web sends it as an object.
 - Fold a whatsapp-web.js mention given as a padded, upper-case, `@s.whatsapp.net`, `:device` or hosted id to the neutral id before it reaches WhatsApp Web, in text, media, sticker, reply and edit sends, as Baileys already does.
 - Reduce a group participant id to its neutral form before it reaches the engine, so `628123:3@c.us` or `628123@C.US` no longer reports a real member as not a member.
