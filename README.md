@@ -1,471 +1,317 @@
 <p align="center">
-  <img src="docs/logo/openwa_logo.webp" alt="OpenWA Logo" width="200"/>
+  <img src="dashboard/public/pamgm_logo.png" alt="Logo PAMGM" width="160"/>
 </p>
 
-<h1 align="center">OpenWA</h1>
+<h1 align="center">OpenWA PAMGM</h1>
 <p align="center">
-  <strong>Open Source WhatsApp API Gateway</strong>
-</p>
-
-<p align="center">
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-documentation">Docs</a> •
-  <a href="#-api-examples">API</a> •
-  <a href="#-contributing">Contributing</a>
+  <strong>WhatsApp API Gateway internal PAMGM, berbasis OpenWA</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/rmyndharis/OpenWA/actions/workflows/ci.yml"><img src="https://github.com/rmyndharis/OpenWA/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"/></a>
-  <img src="https://img.shields.io/github/package-json/v/rmyndharis/OpenWA?label=version&color=blue" alt="Version"/>
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"/>
+  <a href="#-mulai-cepat">Mulai Cepat</a> •
+  <a href="#-deployment-produksi-pamgm">Deployment</a> •
+  <a href="#-autentikasi">Autentikasi</a> •
+  <a href="#-contoh-api">API</a> •
+  <a href="#-sinkronisasi-dengan-upstream">Upstream</a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/node-22_LTS-brightgreen.svg" alt="Node"/>
-  <img src="https://img.shields.io/github/package-json/dependency-version/rmyndharis/OpenWA/@nestjs/core?label=NestJS&color=red" alt="NestJS"/>
-  <img src="https://img.shields.io/badge/docker-ready-blue.svg" alt="Docker"/>
-  <img src="https://img.shields.io/github/package-json/dependency-version/rmyndharis/OpenWA/dev/typescript?label=TypeScript&color=3178C6" alt="TypeScript"/>
+  <img src="https://img.shields.io/badge/NestJS-11-red.svg" alt="NestJS"/>
+  <img src="https://img.shields.io/badge/engine-whatsapp--web.js-25D366.svg" alt="Engine"/>
+  <img src="https://img.shields.io/badge/database-PostgreSQL-336791.svg" alt="PostgreSQL"/>
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"/>
 </p>
 
 ---
 
-## ✨ Why OpenWA?
+## Tentang repo ini
 
-**OpenWA** is a free, open-source WhatsApp API Gateway designed for developers who need full control over their messaging infrastructure—without vendor lock-in or hidden paywalls.
+**OpenWA PAMGM** adalah fork dari [OpenWA](https://github.com/rmyndharis/OpenWA) (WhatsApp API Gateway open source berbasis NestJS) yang disesuaikan untuk kebutuhan internal PAMGM. Inti gateway-nya sama dengan upstream: REST API, multi-session, webhook, dashboard React, dan MCP. Yang berbeda ada di cara deploy, cara login, dan cara API key dibagikan.
 
-Built on a **pluggable architecture**, OpenWA lets you select database engines (SQLite/PostgreSQL), backup/migration storage backends (Local/S3), and cache layers (disabled/Redis) through configuration rather than application-code changes. Message media itself is returned inline to API and webhook consumers; it is not automatically persisted to the storage backend.
-
-|                               |                                                                                                                                          |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 🔓 **100% Open Source**       | No licensing fees, no feature locks, full source code access                                                                             |
-| 🏗️ **Pluggable Architecture** | Swap adapters for database, storage, and cache via config                                                                                |
-| 🖥️ **Full Dashboard**         | Modern React UI for session, webhook, and API key management                                                                             |
-| 🔹 **Multi-Session Ready**    | Run multiple WhatsApp sessions concurrently on one instance                                                                              |
-| 🐳 **Docker Native**          | Production-ready with zero configuration                                                                                                 |
-| 🧩 **Official Plugins**       | Chatwoot, Typebot & more as sandboxed plugins on the Integration Fabric — [OpenWA-plugins](https://github.com/rmyndharis/OpenWA-plugins) |
-| 🔗 **n8n Integration**        | Community nodes for workflow automation                                                                                                  |
-| 🧩 **Community Adapters**     | Third-party integrations (e.g. ioBroker) — see [docs](./docs/23-community-integrations.md)                                               |
-| 🔐 **Session-scoped keys**    | Operator and viewer (reader) tokens can be limited to chosen sessions — or all sessions if none are selected                             |
-
-### Session-scoped operator & viewer tokens
-
-When you create or edit an **operator** or **viewer** API key in the dashboard, you can tick the WhatsApp sessions that key may use.
-
-- **No sessions selected** — the key can access every session, including ones created later.
-- **One or more sessions selected** — the key can only list, read, and (for operator) manage those sessions. A request naming any other session returns `401`; session-filtered lists (sessions, audit, webhook delivery failures) return that key's rows rather than an error; and the key-management routes and the queue dashboard, which name no session at all, return `403`.
-
-Admin keys stay unscoped in the dashboard so they can keep managing other API keys. The HTTP API still accepts `allowedSessions` on any role if you need that from a client.
+| Bagian               | Upstream OpenWA                            | OpenWA PAMGM (fork ini)                                                                                |
+| -------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **Database**         | SQLite, atau PostgreSQL bawaan via profile | PostgreSQL **eksternal** yang sudah ada; container Postgres dan MinIO bawaan dihapus dari compose      |
+| **Redis**            | Opsional (profile `redis`)                 | Selalu ikut jalan sebagai service inti, agar redeploy Dokploy tanpa flag tetap membuatnya              |
+| **Login dashboard**  | Tempel API key                             | **Email + password** per pengguna (`DASHBOARD_USERS`), dengan reset password lewat email               |
+| **API key**          | Dibuat admin                               | Bisa juga diminta sendiri lewat email kantor (self-service), lengkap dengan pemulihan dan reCAPTCHA v3 |
+| **Cakupan API key**  | Key tanpa daftar session melihat semua     | Key non-admin tanpa daftar session hanya melihat session yang **dibuatnya sendiri**                    |
+| **Jaringan & waktu** | DNS bawaan Docker, UTC                     | DNS internal PTAMGM (`10.10.222.101`) dengan fallback `8.8.8.8`, `TZ=Asia/Makassar`                    |
+| **Tampilan**         | Branding OpenWA                            | Branding PAMGM di dashboard                                                                            |
 
 ---
 
-## ⚠️ Before you connect a number — please read
+## ⚠️ Sebelum menghubungkan nomor
 
-OpenWA is an unofficial, community-maintained gateway. It connects to WhatsApp through **reverse-engineered clients** (the [`whatsapp-web.js`](https://github.com/pedroslopez/whatsapp-web.js) project and [`@whiskeysockets/baileys`](https://github.com/WhiskeySockets/Baileys)), **not** through Meta's official Cloud API. This has real consequences you should understand before you link a phone number.
+OpenWA bukan API resmi Meta. Koneksi ke WhatsApp memakai klien hasil rekayasa balik ([`whatsapp-web.js`](https://github.com/pedroslopez/whatsapp-web.js) dan [`baileys`](https://github.com/WhiskeySockets/Baileys)), sehingga **selalu ada risiko nomor dibatasi atau diblokir**.
 
-### What this means in practice
+- **Pakai nomor khusus**, jangan nomor pribadi atau nomor utama kantor.
+- **Engine default di PAMGM adalah `whatsapp-web.js`.** Engine ini menjalankan Chromium sungguhan sehingga risiko blokirnya lebih rendah, tapi butuh RAM sekitar 300–500 MB per session. `baileys` jauh lebih hemat RAM, tapi lebih mudah dikenali WhatsApp.
+- **Hangatkan nomor baru** beberapa hari dengan pemakaian wajar sebelum dipakai mengirim otomatis.
+- **Jangan kirim massal ke nomor yang belum pernah berinteraksi.** Kirim ke penerima yang memang menunggu pesan (notifikasi, balasan layanan), dan gunakan rate limiter (`RATE_LIMIT_*`).
+- **Siapkan jalur cadangan** (SMS atau email) untuk hal yang kritis seperti OTP.
+- Nomor yang sudah dibatasi WhatsApp tidak bisa dipulihkan dari gateway; banding harus lewat WhatsApp sendiri.
 
-- **There is always a non-zero risk of account restriction or ban.** WhatsApp's anti-abuse systems actively look for unofficial automation. No amount of code quality on our side can make that risk zero.
-- **Pick the right number.** Never connect your primary personal or business number to an automated gateway. Use a **dedicated number** you can afford to lose. If you're running this for paying clients, pass that guidance on to them.
-- **The two engines trade off differently:**
-
-  | Engine            | Ban-risk profile                                                                                        | Resource cost                     |
-  | ----------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------- |
-  | `whatsapp-web.js` | Lower — drives a real headless Chromium that looks like genuine WhatsApp Web traffic.                   | High RAM (~300–500 MB / session). |
-  | `baileys`         | Higher — speaks the multi-device WebSocket protocol directly and is easier for WhatsApp to fingerprint. | Low RAM (~30–80 MB / session).    |
-
-  If account safety is your top priority and you can afford the memory, prefer `whatsapp-web.js`. If you need density and accept the trade-off, use `baileys`.
-
-### Safe-sending guidelines
-
-These are practical guardrails, not guarantees — but they materially reduce the chance of WhatsApp flagging the account:
-
-1. **Warm up fresh numbers.** For the first several days, behave like a normal human user: scan the QR, exchange a handful of messages with saved contacts, join a group or two, set a profile photo. Don't blast on day one.
-2. **Don't cold-blast strangers.** Sending the first-ever message to a large batch of numbers that have never messaged you is the single most reliable way to get restricted — on either engine.
-3. **Rate-limit yourself.** OpenWA ships with a configurable rate limiter (`RATE_LIMIT_*` env vars). Use it. A few messages per minute per session is sustainable; "thousands in an hour" is not.
-4. **Use opted-in recipients.** The safest workloads are replies and alerts to people who already expect to hear from you (OTP to your own users, order updates, support replies).
-5. **Keep a fallback.** For anything auth-critical or revenue-critical, keep an SMS / email / official-Cloud-API path. Do not bet a login flow solely on an unofficial client.
-6. **Mind the hosting IP.** Cheap datacenter IPs are flagged more aggressively than residential ones. A residential proxy (supported per-session via the proxy settings) can help; it is not a license to spam.
-
-### Known platform behaviour (not bugs)
-
-A few things that look like bugs but are actually server-side WhatsApp policy, not OpenWA defects — we track them separately so we can distinguish them from real bugs:
-
-- **First message to a brand-new contact sometimes never arrives.** The API returns success because the message leaves OpenWA, but WhatsApp's server-side reach-out / trust policy drops it at delivery. This is independent of OpenWA. We track it in [#830](https://github.com/rmyndharis/OpenWA/issues/830).
-- **Accounts that get restricted cannot be "unrestricted" by us.** If WhatsApp disables a number, you need to appeal through their channels — OpenWA has no lever to pull.
-
-### Compliance
-
-For any deployment where ethical, legal, or regulatory compliance matters (healthcare, finance, large-scale commercial messaging, anything touching end users in the EU/EEA under DMA/GDPR framings), treat OpenWA as **not approved** and use Meta's [official WhatsApp Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api). OpenWA is an excellent fit for personal projects, internal tooling, automation hobbyists, and learning — it is not a drop-in replacement for the official API in regulated environments.
-
-📖 For the deeper, maintainer-side risk analysis (protocol-change exposure, dependency strategy, security posture), see [Risk Management (`docs/16`)](./docs/16-risk-management.md).
+Analisis risiko lengkap dari upstream ada di [`docs/16-risk-management.md`](./docs/16-risk-management.md).
 
 ---
 
-## 🎯 Features
+## 🎯 Fitur
 
-### Core Features
+- **REST API** untuk WhatsApp: teks, media (gambar, video, dokumen, audio), reaksi, edit pesan, kirim massal, status kirim dan baca
+- **Multi-session**: banyak nomor WhatsApp dalam satu instance
+- **Webhook** real-time dengan tanda tangan HMAC dan filter opsional
+- **Dashboard React** untuk session, webhook, API key, chat, template, log, dan infrastruktur
+- **Grup, kontak, label, channel, profil, panggilan masuk**
+- **Proxy per session**, rate limiting, whitelist CIDR, audit log
+- **MCP server** opsional untuk agen AI
+- **Swagger** di `/api/docs` (di produksi hanya aktif jika `ENABLE_SWAGGER=true`)
 
-| Feature       | Status | Description                                                                  |
-| ------------- | ------ | ---------------------------------------------------------------------------- |
-| REST API      | ✅     | Full WhatsApp API via HTTP endpoints                                         |
-| Multi-Session | ✅     | Manage multiple WhatsApp accounts                                            |
-| Webhooks      | ✅     | Real-time events with HMAC signature and optional smart pre-dispatch filters |
-| Web Dashboard | ✅     | Visual management interface                                                  |
-| API Key Auth  | ✅     | Secure API authentication                                                    |
-| Swagger Docs  | ✅     | Interactive API documentation                                                |
-
-### Messaging
-
-| Feature           | Status | Description                                               |
-| ----------------- | ------ | --------------------------------------------------------- |
-| Text Messages     | ✅     | Send/receive text messages                                |
-| Media Messages    | ✅     | Images, videos, documents, audio                          |
-| Message Reactions | ✅     | React to messages with emoji                              |
-| Message Editing   | ✅     | Send edits + live `message.edited` events on both engines |
-| Bulk Messaging    | ✅     | Send to multiple recipients                               |
-| Message Status    | ✅     | Track delivery and read receipts                          |
-
-### Advanced
-
-| Feature             | Status | Description                                                                                                                                                                  |
-| ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Groups API          | ✅     | Create, manage, join (invite code), and configure groups                                                                                                                     |
-| Profile Management  | ✅     | Set own display name, about text, and profile picture                                                                                                                        |
-| Call Handling       | ✅     | `call.received` events, reject calls, per-session auto-reject                                                                                                                |
-| Channels/Newsletter | ✅     | WhatsApp Channels support                                                                                                                                                    |
-| Labels Management   | ✅     | Organize chats with labels                                                                                                                                                   |
-| Proxy Support       | ✅     | Per-session proxy configuration                                                                                                                                              |
-| Rate Limiting       | ✅     | Configurable request limits                                                                                                                                                  |
-| CIDR Whitelisting   | ✅     | IP-based access control                                                                                                                                                      |
-| Audit Logging       | ✅     | Audit trail for API-key, session, integration-instance, and infra admin operations (message sends and webhook deliveries are tracked in their own tables, not the audit log) |
-
-### Infrastructure
-
-| Feature          | Status | Description                              |
-| ---------------- | ------ | ---------------------------------------- |
-| SQLite           | ✅     | Zero-config embedded database            |
-| PostgreSQL       | ✅     | Production-grade database                |
-| Redis Cache      | ✅     | Optional performance caching             |
-| S3/MinIO Storage | ✅     | Media-directory backup/migration backend |
-| Docker           | ✅     | One-command deployment                   |
-| Health Checks    | ✅     | Kubernetes-ready probes                  |
-| Data Migration   | ✅     | Export/import between backends           |
+Detail per fitur dan per engine: [`docs/06-api-specification.md`](./docs/06-api-specification.md) dan [`docs/29-engine-capability-matrix.md`](./docs/29-engine-capability-matrix.md).
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Mulai Cepat
 
-### Option A: Docker (Recommended)
+### Pengembangan lokal
 
 ```bash
-# Clone and start
-git clone https://github.com/rmyndharis/OpenWA.git
-cd OpenWA
-docker compose -f docker-compose.dev.yml up -d
+git clone https://github.com/anditalisman/OpenWA-NG.git
+cd OpenWA-NG
 
-# Access (the dashboard is bundled into the API image and served on the same port)
-# Dashboard: http://localhost:2785
-# API: http://localhost:2785/api
-# Swagger: http://localhost:2785/api/docs
-```
-
-> **Using Podman instead of Docker?**
-> Podman rootless mode requires the socket to be running and `DOCKER_HOST` to be set:
->
-> ```bash
-> systemctl --user start podman.socket
-> systemctl --user enable podman.socket
-> export DOCKER_HOST=unix:///run/user/$(id -u)/podman/podman.sock
-> ```
->
-> Add the `export` line to your `~/.bashrc` to make it permanent.
-
-### Option B: Local Development
-
-```bash
-# Clone repository
-git clone https://github.com/rmyndharis/OpenWA.git
-cd OpenWA
-
-# Install the locked dependencies (includes dashboard)
+# Pasang dependency sesuai lockfile (termasuk dashboard).
+# postinstall juga memasang patch whatsapp-web.js dan baileys, jadi jangan dilewati.
 npm ci
 
-# Start API + Dashboard (config is auto-generated on first run)
+# Jalankan API + dashboard (konfigurasi dibuat otomatis saat pertama jalan)
 npm run dev
-
-# Access (in dev the dashboard runs on the Vite server with hot reload)
-# Dashboard: http://localhost:2886
-# API: http://localhost:2785/api
-# Swagger: http://localhost:2785/api/docs
 ```
 
-Use `npm install` instead when intentionally changing dependencies. OpenWA's committed lockfile uses
-registry artifacts only, so npm 12 works with its secure default that blocks Git dependencies; do not
-disable that policy globally.
+| Layanan         | Alamat                         |
+| --------------- | ------------------------------ |
+| API             | http://localhost:2785/api      |
+| Swagger         | http://localhost:2785/api/docs |
+| Dashboard (dev) | http://localhost:2886 (Vite)   |
 
----
-
-## 🔒 Security Architecture
-
-### Docker Socket Proxy
-
-The production stack never exposes `/var/run/docker.sock` directly to the application container. Instead, a dedicated `docker-proxy` sidecar (based on [`tecnativa/docker-socket-proxy`](https://github.com/Tecnativa/docker-socket-proxy)) acts as the sole gateway to the Docker daemon:
-
-```
-openwa-api  ──TCP 2375──▶  docker-proxy  ──unix──▶  /var/run/docker.sock
-```
-
-Only the operations needed for container orchestration are enabled (`CONTAINERS`, `IMAGES`, `VOLUMES`, `INFO`, `PING`, plus the `POST` method switch). The application connects via the `DOCKER_HOST=tcp://docker-proxy:2375` environment variable, which `DockerService` detects automatically. Note this is an operational gateway, not a fine-grained privilege boundary: with `POST` enabled the proxy admits every method to the enabled paths and cannot scope container-create payloads, so a compromised API container would be host-root-equivalent — see `SECURITY.md` for the full threat model, mitigations, and how to disable the proxy if you don't use the built-in datastore orchestration.
-
-### Non-root Container Execution
-
-The production image never runs the Node.js process as root. On startup, the container follows this chain:
-
-```
-dumb-init (PID 1)
-  └─ docker-entrypoint.sh (root — fixes named-volume ownership via chown)
-       └─ gosu openwa node dist/main  (drops to the openwa user)
-```
-
-- **dumb-init** is PID 1 and forwards signals (SIGTERM, etc.) for graceful shutdown.
-- **docker-entrypoint.sh** runs as root only long enough to `chown` the named-volume mount points so the `openwa` user can write to them.
-- **gosu** performs a clean `exec`-based privilege drop — no `su` or `sudo` wrappers, so the node process is the direct child of dumb-init.
-
-Named volumes (e.g. `openwa-data`) get their ownership corrected automatically on every start, so no manual `chown` step is needed after volume creation.
-
----
-
-## 🏭 Production Deployment
-
-For production, use the main `docker-compose.yml` with optional services:
+Untuk menjalankan stack Docker lokal dengan SQLite:
 
 ```bash
-# Basic production (SQLite, local storage)
-docker compose up -d
-
-# With PostgreSQL database
-docker compose --profile postgres up -d
-
-# Full stack (PostgreSQL, Redis, MinIO)
-docker compose --profile full up -d
+docker compose -f docker-compose.dev.yml up -d
+# Dashboard + API: http://localhost:2785
 ```
-
-| Profile    | Services              |
-| ---------- | --------------------- |
-| `postgres` | PostgreSQL database   |
-| `redis`    | Redis cache           |
-| `minio`    | S3-compatible storage |
-| `full`     | All services above    |
-
-> The dashboard is bundled into the API image and served by NestJS on the API port, so it
-> needs no profile — it is always available wherever `openwa-api` runs. For TLS/public exposure,
-> put your own reverse proxy (nginx, Caddy, a cloud load balancer, or a k8s Ingress) in front;
-> see the nginx example in `docs/12-troubleshooting-faq.md`.
-
-> **Development vs Production**
->
-> - Development (`docker-compose.dev.yml`): SQLite, local storage, API serves the bundled dashboard
-> - Production (`docker-compose.yml`): Configurable database, profiles for optional services
->
-> Official GHCR images are published as multi-arch manifests for:
->
-> - `linux/amd64`
-> - `linux/arm64`
-
-## 🔌 Ports
-
-| Service         | Port            | Description                                                                         |
-| --------------- | --------------- | ----------------------------------------------------------------------------------- |
-| API & Dashboard | `2785`          | REST API + bundled web dashboard (same port)                                        |
-| Swagger         | `2785/api/docs` | Interactive API docs — off under `NODE_ENV=production` unless `ENABLE_SWAGGER=true` |
-| Dashboard (dev) | `2886`          | Vite dev server with hot reload (`npm run dev`)                                     |
 
 ---
 
-## 📡 API Examples
+## 🏭 Deployment Produksi PAMGM
 
-### Create a Session
+Produksi dideploy dengan **Dokploy** memakai `docker-compose.yml` di root repo. File ini sudah versi PAMGM:
+
+- **Tanpa** container Postgres dan MinIO bawaan. Database memakai server PostgreSQL eksternal.
+- **Redis** selalu dibuat sebagai service inti (tanpa `--profile`), karena tombol redeploy Dokploy hanya menjalankan `docker compose up -d`.
+- `openwa-api` memakai DNS internal PTAMGM `10.10.222.101` untuk me-resolve host internal (Postgres, relay SMTP), dengan `8.8.8.8` sebagai fallback untuk host luar (server WhatsApp, registry versi WhatsApp Web, npm saat build).
+- `TZ=Asia/Makassar`, supaya waktu log sama dengan stack PAMGM lain.
+- Data session WhatsApp disimpan di volume `openwa_openwa-data` (`/app/data`).
+
+Versi lengkap dari upstream (Postgres, Redis, dan MinIO bawaan lewat profile) tetap tersedia di `docker-compose.full.yml` sebagai referensi.
+
+```bash
+docker compose up -d --build
+```
+
+### Variabel lingkungan minimum
+
+Isi di `.env` (atau environment Dokploy). Daftar lengkap ada di [`.env.example`](./.env.example).
+
+```bash
+# Database: PostgreSQL eksternal
+DATABASE_TYPE=postgres
+DATABASE_HOST=<host-postgres-internal>
+DATABASE_PORT=5432
+DATABASE_NAME=openwa
+DATABASE_USERNAME=<user>
+DATABASE_PASSWORD=<password>
+
+# Redis: container ikut jalan, tapi aplikasi baru memakainya jika diaktifkan
+REDIS_ENABLED=true
+REDIS_HOST=redis
+REDIS_PORT=6379
+
+# URL publik (dipakai di link email reset password dan verifikasi API key)
+BASE_URL=https://<domain-api>
+DASHBOARD_URL=https://<domain-dashboard>
+
+# Akun dashboard (lihat bagian Autentikasi)
+DASHBOARD_USERS=admin@ptamgirimenang.com:admin
+
+# SMTP untuk email reset password dan API key self-service
+SMTP_HOST=<relay-smtp>
+SMTP_PORT=587
+SMTP_FROM="OpenWA PAMGM <no-reply@...>"
+```
+
+### Hal yang perlu dijaga
+
+- **Jangan hapus volume `openwa_openwa-data`** (misalnya dengan `docker compose down -v`). Isinya login WhatsApp setiap session. Selama volume ini ada, restart atau redeploy tidak perlu scan QR ulang; session hanya terputus sebentar.
+- **Patch `whatsapp-web.js` dan `baileys` wajib terpasang.** Image Docker memasangnya sendiri saat build. Di luar Docker, patch ini dipasang oleh `npm ci` lewat postinstall, jadi jangan menjalankannya dengan `--ignore-scripts`.
+- Pasang reverse proxy dengan TLS di depan port `2785` untuk akses dari luar.
+
+---
+
+## 🔐 Autentikasi
+
+### Login dashboard (email + password)
+
+Dashboard hanya menerima login dengan email dan password; API key yang ditempel di halaman login akan ditolak.
+
+- Daftar akun diatur lewat `DASHBOARD_USERS`, dipisahkan koma, dengan format `email:role[:sessionId|sessionId...]`. Role: `admin`, `operator`, atau `viewer`.
+  ```bash
+  DASHBOARD_USERS=admin@ptamgirimenang.com:admin,cs@ptamgirimenang.com:operator:<session-id>
+  ```
+- Pengguna non-admin hanya melihat session yang tercantum di belakang emailnya.
+- Akun dibuat atau diperbarui setiap kali aplikasi start. Email yang dihapus dari daftar akan dinonaktifkan dan dikeluarkan dari login.
+- Password **tidak pernah** ditulis di konfigurasi. Setiap pengguna mengatur password sendiri lewat **"Lupa password?"** di halaman login, yang mengirim link sekali pakai ke emailnya (butuh SMTP dan `DASHBOARD_URL`).
+- Durasi login diatur `DASHBOARD_SESSION_TTL_HOURS` (default 12 jam), masa berlaku link reset `DASHBOARD_PASSWORD_RESET_TTL_MINUTES` (default 30 menit).
+
+### API key untuk aplikasi
+
+API key dikirim lewat header `X-API-Key` (atau `Authorization: Bearer ...`).
+
+- **Dibuat admin** di menu API Keys pada dashboard, dengan role `admin`, `operator`, atau `viewer`.
+- **Cakupan session**: key `operator` atau `viewer` bisa dibatasi ke session tertentu. Key non-admin **tanpa** daftar session hanya bisa melihat dan mengelola session yang dibuat oleh key itu sendiri, bukan seluruh session di server.
+
+### API key self-service (opsional)
+
+Pegawai bisa meminta API key sendiri tanpa menunggu admin. Fitur ini mati secara default.
+
+1. Buka `/request-api-key` di dashboard (ada link dari halaman login), isi nama dan email kantor.
+2. Jika domain email ada di `SELF_SERVICE_ALLOWED_EMAIL_DOMAINS`, link verifikasi dikirim ke email tersebut. Jawaban halaman selalu sama, sehingga daftar domain tidak bisa ditebak dari luar.
+3. Link verifikasi (sekali pakai) menerbitkan key ber-role `operator` yang hanya mencakup session yang dibuatnya sendiri.
+
+Key yang hilang bisa dipulihkan lewat `/forgot-api-key`: setelah link di email diklik, semua key self-service milik email itu dicabut dan diganti key baru, dan akses ke session lama ikut dipindahkan ke key baru. Kedua formulir publik ini bisa dilindungi Google reCAPTCHA v3.
+
+```bash
+SELF_SERVICE_API_KEYS_ENABLED=true
+SELF_SERVICE_ALLOWED_EMAIL_DOMAINS=ptamgirimenang.com
+SELF_SERVICE_TOKEN_TTL_MINUTES=30
+
+RECAPTCHA_ENABLED=true
+RECAPTCHA_SITE_KEY=<site-key>
+RECAPTCHA_SECRET_KEY=<secret-key>
+RECAPTCHA_MIN_SCORE=0.5
+```
+
+Aplikasi menolak start jika `SELF_SERVICE_API_KEYS_ENABLED=true` tapi SMTP, daftar domain, atau URL dasar belum diisi.
+
+---
+
+## 📡 Contoh API
+
+### Buat session
 
 ```bash
 curl -X POST http://localhost:2785/api/sessions \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"name": "my-bot"}'
+  -H "X-API-Key: API_KEY_ANDA" \
+  -d '{"name": "cs-bot"}'
 ```
 
-### Start Session & Get QR Code
+### Start session dan ambil QR
 
 ```bash
-# Start the session
 curl -X POST http://localhost:2785/api/sessions/{sessionId}/start \
-  -H "X-API-Key: YOUR_API_KEY"
+  -H "X-API-Key: API_KEY_ANDA"
 
-# Get QR code (scan with WhatsApp)
+# Scan QR ini dari WhatsApp > Perangkat tertaut
 curl http://localhost:2785/api/sessions/{sessionId}/qr \
-  -H "X-API-Key: YOUR_API_KEY"
+  -H "X-API-Key: API_KEY_ANDA"
 ```
 
-### Send a Message
+### Kirim pesan teks
 
 ```bash
 curl -X POST http://localhost:2785/api/sessions/{sessionId}/messages/send-text \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
+  -H "X-API-Key: API_KEY_ANDA" \
   -d '{
     "chatId": "628123456789@c.us",
-    "text": "Hello from OpenWA!"
+    "text": "Halo dari OpenWA PAMGM!"
   }'
 ```
 
-### Setup Webhook
+### Pasang webhook
 
 ```bash
 curl -X POST http://localhost:2785/api/sessions/{sessionId}/webhooks \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: YOUR_API_KEY" \
+  -H "X-API-Key: API_KEY_ANDA" \
   -d '{
-    "url": "https://your-server.com/webhook",
+    "url": "https://aplikasi-anda/webhook",
     "events": ["message.received", "session.status"],
-    "secret": "your-hmac-secret"
+    "secret": "rahasia-hmac"
   }'
 ```
 
-> **Smart filters (optional):** add a `filters` object to fire the webhook only when conditions match
-> (AND), e.g. `{ "conditions": [{ "field": "sender", "operator": "is", "value": ["1234567890@c.us"] }] }`.
-> Fields: `sender` / `recipient` / `body` / `type` / `mentions` / `fromMe` / `hasMedia` / `isGroup`. A
-> webhook with no filters behaves exactly as before. See the API specification for the full schema.
+Tambahkan objek `filters` jika webhook hanya perlu dikirim untuk kondisi tertentu, misalnya pengirim atau tipe pesan. Skema lengkap ada di [`docs/06-api-specification.md`](./docs/06-api-specification.md).
 
-## 🤖 MCP Server (AI Agents)
+### MCP untuk agen AI (opsional)
 
-OpenWA can expose a **curated set of tools over the [Model Context Protocol](https://modelcontextprotocol.io)** so AI agents (Claude, Cursor, …) can drive WhatsApp. It is **off by default** and **additive** — every REST route keeps working unchanged.
+Aktifkan dengan `MCP_ENABLED=true`. Endpoint `POST /mcp` memakai port dan autentikasi API key yang sama dengan REST. Secara default hanya **25 read-only tools** (alat baca) yang dipasang; `MCP_READONLY=false` memasang seluruh **51 tools**, termasuk alat tulis (kirim pesan, operasi grup). Gunakan key khusus ber-role `operator` yang dibatasi ke session tertentu, dan jangan buka `/mcp` ke internet. Detail: [`docs/24-mcp-integration.md`](./docs/24-mcp-integration.md).
 
-Set `MCP_ENABLED=true` to mount a stateless Streamable-HTTP transport at **`POST /mcp`** on the existing server (same port, no extra process). It mounts **25 read-only tools** by default — session, message, contact, group, webhook, label and automation-rule _reads_ — because the surface is read-only unless you opt out. Add `MCP_READONLY=false` to mount all **51 tools**, adding the write tier (send, reply, group operations). Either way it is a focused surface rather than the full API, so agents aren't overwhelmed.
+---
+
+## 🔄 Sinkronisasi dengan upstream
+
+Fork ini mengikuti [`rmyndharis/OpenWA`](https://github.com/rmyndharis/OpenWA). Karena kode fork sudah cukup berbeda, perbaikan dari upstream diambil bertahap:
+
+- **Cherry-pick per PR** untuk perbaikan engine yang relevan dengan produksi (whatsapp-web.js di atas PostgreSQL). Jika kode fork terlalu berbeda, perbaikannya di-port manual, dan pesan commit menyebut nomor PR upstream-nya, misalnya `fix(wwjs): ... (#2023)`.
+- **Merge penuh** sesekali, untuk mengejar perubahan besar sekaligus.
 
 ```bash
-MCP_ENABLED=true npm run start:prod   # or set MCP_ENABLED in your .env / compose
+git remote add upstream https://github.com/rmyndharis/OpenWA.git
+git fetch upstream
 ```
 
-Point an MCP client at it (e.g. for Claude Code, a `.mcp.json` at your project root):
-
-```json
-{
-  "mcpServers": {
-    "openwa": {
-      "type": "http",
-      "url": "http://localhost:2785/mcp",
-      "headers": { "Authorization": "Bearer YOUR_API_KEY" }
-    }
-  }
-}
-```
-
-The key can be passed as `Authorization: Bearer …` or `X-API-Key: …`. Every tool call goes through the **same API-key auth, role, and per-session scoping** as REST.
-
-**Security guidance:**
-
-- **Mint a dedicated, least-privilege key** for the agent — a non-admin, **session-scoped** key (`OPERATOR` role at most). The plaintext key is shown only once on creation; to rotate, create a new key and delete the old one.
-- The key **must not** carry an IP allow-list (`allowedIps`) — there is no genuine client IP over MCP, so such a key is rejected.
-- Set **`MCP_READONLY=true`** to mount only the read tools (no sends/writes).
-- Set **`MCP_RATE_LIMIT_MAX`** (default `60`) to limit tool calls per API key per window.
-- Set **`MCP_RATE_LIMIT_WINDOW_MS`** (default `60000`) to control the sliding window size in milliseconds.
-- **Do not expose `/mcp` to the public internet** without a fronting auth proxy. For a self-hosted, locally-reached deployment the static API key is appropriate; public exposure should use OAuth 2.1 (not yet built).
+Pesan commit di repo ini ditulis **satu baris dalam bahasa Indonesia**, dengan prefix conventional commit (`fix(...)`, `feat(...)`, `docs(...)`, dan seterusnya).
 
 ---
 
-## 🛠 Tech Stack
+## 🛠 Teknologi
 
-| Layer         | Technology                                              |
-| ------------- | ------------------------------------------------------- |
-| **Runtime**   | Node.js 22 LTS                                          |
-| **Framework** | NestJS 11.x                                             |
-| **Language**  | TypeScript 6.x                                          |
-| **WA Engine** | whatsapp-web.js (default) / baileys — set `ENGINE_TYPE` |
-| **Database**  | SQLite / PostgreSQL                                     |
-| **Cache**     | Redis (optional)                                        |
-| **Storage**   | Local / S3 / MinIO                                      |
-| **ORM**       | TypeORM                                                 |
-| **Container** | Docker + Docker Compose                                 |
+| Lapisan   | Teknologi                                                |
+| --------- | -------------------------------------------------------- |
+| Runtime   | Node.js 22 LTS                                           |
+| Framework | NestJS 11, TypeScript                                    |
+| Engine WA | whatsapp-web.js (default) / baileys, lewat `ENGINE_TYPE` |
+| Database  | PostgreSQL (produksi), SQLite (pengembangan)             |
+| Cache     | Redis                                                    |
+| ORM       | TypeORM                                                  |
+| Dashboard | React + Vite, dibundel ke image API pada port yang sama  |
+| Container | Docker + Docker Compose, dideploy lewat Dokploy          |
 
----
-
-## 📁 Project Structure
-
-```
-openwa/
-├── src/
-│   ├── main.ts                 # Application entry point
-│   ├── app.module.ts           # Root module
-│   ├── config/                 # Configuration
-│   ├── common/                 # Shared utilities
-│   │   ├── cache/              # Redis caching
-│   │   └── storage/            # File storage (Local/S3)
-│   ├── core/                   # Core systems
-│   │   ├── hooks/              # Plugin hooks
-│   │   └── plugins/            # Plugin system
-│   ├── engine/                 # WhatsApp engine abstraction
-│   └── modules/
-│       ├── session/            # Session management
-│       ├── message/            # Message handling
-│       ├── webhook/            # Webhook management
-│       ├── group/              # Groups API
-│       ├── contact/            # Contacts API
-│       ├── auth/               # API key authentication
-│       ├── infra/              # Infrastructure management
-│       └── health/             # Health checks
-├── dashboard/                  # React web dashboard
-├── docs/                      # Documentation
-├── docker-compose.yml
-├── Dockerfile
-└── package.json
-```
+Keamanan container (socket proxy Docker, proses non-root) sama dengan upstream; lihat [`SECURITY.md`](./SECURITY.md).
 
 ---
 
-## 📚 Documentation
+## 📚 Dokumentasi
 
-Comprehensive documentation is available in the `docs/` folder:
+Dokumentasi teknis di folder [`docs/`](./docs/README.md) berasal dari upstream dan berbahasa Inggris:
 
-| Document                                                | Description                  |
-| ------------------------------------------------------- | ---------------------------- |
-| [Project Overview](./docs/01-project-overview.md)       | Introduction and goals       |
-| [Requirements](./docs/02-requirements-specification.md) | Feature specifications       |
-| [Architecture](./docs/03-system-architecture.md)        | System design                |
-| [Security](./docs/04-security-design.md)                | Security implementation      |
-| [Database](./docs/05-database-design.md)                | Data models and migrations   |
-| [API Spec](./docs/06-api-specification.md)              | Complete API reference       |
-| [Development](./docs/08-development-guidelines.md)      | Coding standards             |
-| [Migration Guide](./docs/14-migration-guide.md)         | Database & storage migration |
+| Dokumen                                                           | Isi                                   |
+| ----------------------------------------------------------------- | ------------------------------------- |
+| [Arsitektur](./docs/03-system-architecture.md)                    | Desain sistem                         |
+| [Keamanan](./docs/04-security-design.md)                          | Desain keamanan                       |
+| [Database](./docs/05-database-design.md)                          | Model data dan migrasi                |
+| [Spesifikasi API](./docs/06-api-specification.md)                 | Referensi API lengkap                 |
+| [Runbook operasional](./docs/11-operational-runbooks.md)          | Upgrade, backup, pemulihan            |
+| [Troubleshooting](./docs/12-troubleshooting-faq.md)               | Masalah umum dan solusinya            |
+| [Matriks kemampuan engine](./docs/29-engine-capability-matrix.md) | Perbedaan whatsapp-web.js dan baileys |
 
----
-
-## 🤝 Contributing
-
-We welcome contributions! Here's how to get started:
-
-1. **Fork** the repository
-2. **Create** your feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-Please read our [Development Guidelines](./docs/08-development-guidelines.md) for coding standards and best practices.
+Perubahan per versi tercatat di [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
-## 📄 License
+## 📄 Lisensi
 
-This project is licensed under the **MIT License** – free for personal and commercial use.
+Dirilis dengan **Lisensi MIT**, sama seperti upstream. Lihat [LICENSE](./LICENSE).
 
-See [LICENSE](./LICENSE) for details.
-
----
-
-<div align="center">
-
-**OpenWA** – Free, Open Source WhatsApp API Gateway
-
-[📖 Documentation](./docs/README.md) · [🔌 API Docs](http://localhost:2785/api/docs) · [🐛 Report Bug](https://github.com/rmyndharis/OpenWA/issues) · [💡 Request Feature](https://github.com/rmyndharis/OpenWA/issues)
-
-<br/>
-
-<sub>Made with ❤️ by <a href="https://github.com/rmyndharis">Yudhi Armyndharis</a> and the OpenWA Community</sub>
-
-</div>
+OpenWA dibuat oleh [Yudhi Armyndharis](https://github.com/rmyndharis) dan komunitas OpenWA. Fork ini dikelola untuk kebutuhan internal PAMGM.
