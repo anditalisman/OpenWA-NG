@@ -523,12 +523,19 @@ export class MessageService implements PluginMessagePort {
     dto: { chatId: string; messageId: string; forEveryone?: boolean },
   ): Promise<void> {
     const engine = this.getEngine(sessionId);
-    await engine.deleteMessage(dto.chatId, dto.messageId, dto.forEveryone ?? true);
+    const deleted = await engine.deleteMessage(dto.chatId, dto.messageId, dto.forEveryone ?? true);
 
     // Flag the stored message as revoked. No localized display string is persisted here;
-    // the dashboard renders the localized "message deleted" text.
+    // the dashboard renders the localized "message deleted" text. Under the id the caller named (Baileys keys its
+    // rows by it, and so does a row an earlier engine stored) and, when the engine found the message under another
+    // form of that id, under the one it keys it by: whatsapp-web.js also takes the bare key id of a message it stores
+    // under the serialized id.
+    const ids =
+      typeof deleted === 'string' && deleted && deleted !== dto.messageId ? [dto.messageId, deleted] : [dto.messageId];
     try {
-      await this.messageRepository.update({ sessionId, waMessageId: dto.messageId }, { body: '', type: 'revoked' });
+      for (const waMessageId of ids) {
+        await this.messageRepository.update({ sessionId, waMessageId }, { body: '', type: 'revoked' });
+      }
     } catch (err) {
       this.logger.warn(`Failed to flag deleted message ${dto.messageId} as revoked`, { error: String(err) });
     }

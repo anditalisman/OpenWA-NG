@@ -1,6 +1,6 @@
 import { type Client } from 'whatsapp-web.js';
 import { Label, ChatSummary } from '../interfaces/whatsapp-engine.interface';
-import { GroupChat, BusinessClient } from '../types/whatsapp-web-js.types';
+import { GroupChat, BusinessClient, readWid } from '../types/whatsapp-web-js.types';
 import { isChannelJid, chatKind } from '../identity/wa-id';
 import { ChatLabelsUnsupportedError } from '../../common/errors/chat-labels-unsupported.error';
 import { LabelNotFoundError } from '../../common/errors/label-not-found.error';
@@ -13,6 +13,12 @@ import { type WwebjsEngineHost } from './wwebjs-host';
  * via closures, so the delegate never touches lifecycle state directly.
  */
 export class WwebjsLabels {
+  /**
+   * The settled tail of each chat's label writes, so the next write starts after it; gone once the chat is idle.
+   * Keyed by the id WhatsApp Web resolves the chat to, not by the id a caller typed.
+   */
+  private readonly chatWrites = new Map<string, Promise<void>>();
+
   constructor(private readonly host: WwebjsEngineHost) {}
 
   /** Post-ensureReady client handle. */
@@ -129,14 +135,49 @@ export class WwebjsLabels {
    * Labels are a WhatsApp Business feature — the write throws `[LT01]` on a personal account; channels
    * carry no labels at all. Both are surfaced as a 422 rather than an opaque 500.
    *
-   * The read and write are separate calls, so two concurrent single-label writes to the SAME chat can
-   * lose an update (last write wins, as a full-set replace). Acceptable for low-frequency label admin;
-   * serialize per (sessionId, chatId) if that ever becomes a real workload.
+   * The read and write are separate calls, so two single-label writes to the SAME chat that overlap would undo
+   * each other (the later one removes the label the earlier one just added). They run one after the other per
+   * chat, whichever id names it; a write that waited re-reads the labels.
    */
   private async changeChatLabel(chatId: string, labelId: string, add: boolean): Promise<void> {
     if (isChannelJid(chatId)) {
       throw new ChatLabelsUnsupportedError('Channels do not support chat labels.');
     }
+    const queue = await this.resolveChatId(chatId);
+    // `previous` never rejects (it is the settled tail below), so a failed write does not stop the next.
+    const previous = this.chatWrites.get(queue) ?? Promise.resolve();
+    const write = previous.then(() => this.writeChatLabel(chatId, queue, labelId, add));
+    const tail = write.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.chatWrites.set(queue, tail);
+    void tail.then(() => {
+      if (this.chatWrites.get(queue) === tail) this.chatWrites.delete(queue);
+    });
+    await write;
+  }
+
+  /**
+   * The id WhatsApp Web keys the chat by. A migrated contact's chat is keyed by its lid and found for the phone id as
+   * well, so the writes to one chat have to queue under this id, not the one the caller typed. The typed id stands
+   * in when the page resolves no chat or the lookup fails; the write itself then reports the problem as before.
+   */
+  private async resolveChatId(chatId: string): Promise<string> {
+    try {
+      const chat = await this.client().getChatById(chatId);
+      return readWid(chat?.id) ?? chatId;
+    } catch {
+      return chatId;
+    }
+  }
+
+  /**
+   * `target` is the id WhatsApp Web keys the chat by: the page matches the write's chats by that exact id, so a
+   * phone id naming a lid-keyed chat would match nothing and the write would silently do nothing.
+   */
+  private async writeChatLabel(chatId: string, target: string, labelId: string, add: boolean): Promise<void> {
+    this.host.ensureReady();
     const ids = new Set((await this.getChatLabels(chatId)).map(label => label.id));
     if (add) {
       ids.add(labelId);
@@ -144,7 +185,7 @@ export class WwebjsLabels {
       ids.delete(labelId);
     }
     try {
-      await this.client().addOrRemoveLabels([...ids], [chatId]);
+      await this.client().addOrRemoveLabels([...ids], [target]);
     } catch (error) {
       // whatsapp-web.js throws `[LT01] Only Whatsapp business` from the page context on a personal account.
       if (String(error instanceof Error ? error.message : error).includes('LT01')) {

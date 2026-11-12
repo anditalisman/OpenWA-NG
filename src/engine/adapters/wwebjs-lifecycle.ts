@@ -12,7 +12,7 @@ import { MAX_TIMER_MS } from '../../config/configuration';
 import { resolveWebVersionPin } from '../wa-web-version';
 import { resolveAuthTimeoutMs, resolveEngineInitTimeoutMs } from '../engine-init-timeout';
 import { killOrphanedChromiumProcesses, removeStaleSingletonFiles } from './chromium-profile-hygiene';
-import { isSupportedProxyUrl, buildProxyLaunchConfig } from './wwebjs-proxy';
+import { isSupportedProxyUrl, buildProxyLaunchConfig, bypassServiceWorkerOnLaunch } from './wwebjs-proxy';
 import { BACKPORT_MISSING_MESSAGE, isBackportMissing } from './wwebjs-backport-check';
 import { unappliedPatches, unappliedPatchesMessage } from './engine-patch-status';
 import { type WhatsAppWebJsConfig } from './whatsapp-web-js.adapter';
@@ -61,6 +61,15 @@ export const NAVIGATION_REINJECT_GRACE_MS = 60_000;
 // watchdog forever and leave a zombie session READY that only ever answers 409. Past this cap the
 // probe reports the truth again and the watchdog takes over.
 export const NAVIGATION_EPISODE_CAP_MS = 3 * NAVIGATION_REINJECT_GRACE_MS;
+
+/**
+ * Whether the patched whatsapp-web.js client says the page it has loaded has no event listeners attached yet
+ * (scripts/patch-wwebjs-ready-sync.js): false from the start of a (re-)inject until its attach completes. A tree
+ * without the patch has no marker (undefined) and cannot say, which keeps the legacy checks.
+ */
+function eventBridgeUnattached(client: Client): boolean {
+  return (client as Client & { eventsAttached?: boolean }).eventsAttached === false;
+}
 
 // The single in-adapter retry of a navigation-killed first inject only runs while at least this much
 // of the lifecycle's outer init deadline remains — a retry the outer race SIGKILLs mid-launch would
@@ -343,11 +352,15 @@ export class WwebjsLifecycle {
       configuredProtocolTimeout <= MAX_TIMER_MS
         ? configuredProtocolTimeout
         : undefined;
+    const authStrategy = new LocalAuth({
+      clientId: this.host.config.sessionId,
+      dataPath: path.resolve(this.host.config.sessionDataPath),
+    });
+    // page.authenticate answers the proxy's login for the page only, and a service worker registered by an earlier
+    // start takes the page's requests out of its reach (#819).
+    if (proxyAuthentication) bypassServiceWorkerOnLaunch(authStrategy);
     const client = new Client({
-      authStrategy: new LocalAuth({
-        clientId: this.host.config.sessionId,
-        dataPath: path.resolve(this.host.config.sessionDataPath),
-      }),
+      authStrategy,
       puppeteer: {
         headless: this.host.config.puppeteer?.headless ?? true,
         args: puppeteerArgs,
@@ -535,11 +548,6 @@ export class WwebjsLifecycle {
       // teardown finished) must be dropped outright: dereferencing this.client would throw, and
       // reading it optionally would promote a client-less adapter to READY.
       if (this.client !== source || this.tearingDown || this.disconnectReported) return;
-      // The library re-emits 'ready' at the end of EVERY completed (re)inject pipeline — for a
-      // post-navigation re-inject this is the completion edge, and the only one it offers. Close the
-      // navigation window HERE, before the guards below: markReadyFromClientInfo early-returns while
-      // already READY, so a clear behind it would never run for the re-inject case (#1081).
-      this.clearNavigationReinjectWindow();
       // whatsapp-web.js can emit `ready` BEFORE its message listeners are attached: its post-auth
       // callback runs once per hasSynced trigger, and any run that finds `window.WWebJS` already
       // defined skips the attach and bare-emits `ready` — including while the first run's attach is
@@ -548,14 +556,21 @@ export class WwebjsLifecycle {
       // (scripts/patch-wwebjs-ready-sync.js) distinguishes the cases: `false` → ignore this emit
       // and let the attach's own completion re-emit `ready` (it always does), with the readiness
       // reconciliation as the backstop when the attach failed instead. `undefined` (unpatched
-      // tree) keeps the legacy behaviour.
-      if ((source as Client & { eventsAttached?: boolean }).eventsAttached === false) {
+      // tree) keeps the legacy behaviour. The same holds for a page that reloaded: the flag is false
+      // again from the start of its re-inject, so this emit says nothing about the page now loaded,
+      // and it must not close the navigation window.
+      if (eventBridgeUnattached(source)) {
         this.host.logger.warn('Ignoring premature ready: the message event bridge is not attached yet', {
           sessionId: this.host.config.sessionId,
           action: 'premature_ready_ignored',
         });
         return;
       }
+      // The library re-emits 'ready' at the end of EVERY completed (re)inject pipeline — for a
+      // post-navigation re-inject this is the completion edge, and the only one it offers. Close the
+      // navigation window HERE, before markReadyFromClientInfo, which early-returns while already
+      // READY, so a clear behind it would never run for the re-inject case (#1081).
+      this.clearNavigationReinjectWindow();
       this.markReadyFromClientInfo();
     });
 
@@ -991,6 +1006,21 @@ export class WwebjsLifecycle {
           timeout.unref?.();
         }),
       ]);
+      if (state === WAState.CONNECTED && eventBridgeUnattached(this.client)) {
+        // A reloaded page reports CONNECTED and can still send before its event listeners are attached, and a
+        // re-inject whose attach failed stays that way: READY with no inbound events. It is not counted as
+        // recovered. Alive while the bounded navigation window lasts (the attach may still complete), dead after
+        // it, so the watchdog restarts the session instead of leaving it deaf.
+        if (this.isInNavigationReinjectWindow()) return true;
+        this.host.logger.warn(
+          'WhatsApp Web is connected but its event bridge is not attached; failing the liveness probe',
+          {
+            sessionId: this.host.config.sessionId,
+            action: 'liveness_bridge_unattached',
+          },
+        );
+        return false;
+      }
       if (state === WAState.CONNECTED) {
         // Observed recovery closes the navigation episode. Without this, an episode whose re-inject
         // died silently (no 'ready' re-emit, but WA Web's socket back up) would keep a stale episode

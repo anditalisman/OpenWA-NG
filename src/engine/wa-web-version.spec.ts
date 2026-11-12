@@ -270,3 +270,92 @@ describe('resolveCurrentWebVersion failure warning', () => {
     expect(mockWarn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('resolveWebVersionPin — a registry build whose page is the logged-out page (#2023)', () => {
+  const LOGGED_OUT = '<!DOCTYPE html><html lang="en" id="whatsapp-web-logged-out"><head></head><body></body></html>';
+  const APP = '<!DOCTYPE html><html lang="en" id="whatsapp-web"><head></head><body></body></html>';
+  const day = 86_400_000;
+  const registry = {
+    currentVersion: '2.3000.NEW-alpha',
+    versions: [
+      { version: '2.3000.NEW-alpha', beta: false, released: new Date(Date.now() - 2 * day).toISOString() },
+      { version: '2.3000.MID-alpha', beta: false, released: new Date(Date.now() - 3 * day).toISOString() },
+      { version: '2.3000.OLD-alpha', beta: false, released: new Date(Date.now() - 4 * day).toISOString() },
+    ],
+  };
+  // The registry answers JSON; each build's HTML is the logged-out page for the builds in `loggedOut`.
+  const fetcherFor = (loggedOut: string[]) =>
+    jest.fn((url: string) => {
+      if (url === WA_VERSION_REGISTRY_URL)
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(registry) });
+      const html = loggedOut.some(v => url.includes(v)) ? LOGGED_OUT : APP;
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(html) });
+    });
+  const htmlFetches = (fetcher: jest.Mock) =>
+    fetcher.mock.calls.filter(([url]) => url !== WA_VERSION_REGISTRY_URL).length;
+
+  beforeEach(() => {
+    __resetWebVersionCache();
+    mockWarn.mockReset();
+    delete process.env.WWEBJS_WEB_VERSION;
+    delete process.env.WWEBJS_WEB_VERSION_REMOTE_PATH;
+  });
+
+  it('pins the next older settled build when the newest is the logged-out page', async () => {
+    const fetcher = fetcherFor(['NEW']);
+    const pin = await resolveWebVersionPin(fetcher as never);
+    expect(pin?.webVersion).toBe('2.3000.MID-alpha');
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.stringContaining('logged-out page'),
+      expect.objectContaining({ action: 'web_version_html_rejected', webVersion: '2.3000.NEW-alpha' }),
+    );
+  });
+
+  it('checks a good build once per process', async () => {
+    const fetcher = fetcherFor([]);
+    await resolveWebVersionPin(fetcher as never);
+    await resolveWebVersionPin(fetcher as never);
+    expect(htmlFetches(fetcher)).toBe(1);
+  });
+
+  it('keeps skipping a rejected build without fetching its page again', async () => {
+    const fetcher = fetcherFor(['NEW']);
+    await resolveWebVersionPin(fetcher as never);
+    const fetches = htmlFetches(fetcher);
+    await expect(resolveWebVersionPin(fetcher as never)).resolves.toMatchObject({ webVersion: '2.3000.MID-alpha' });
+    expect(htmlFetches(fetcher)).toBe(fetches);
+  });
+
+  it('gives up after three logged-out builds and continues without a pin', async () => {
+    const fetcher = fetcherFor(['NEW', 'MID', 'OLD']);
+    await expect(resolveWebVersionPin(fetcher as never)).resolves.toBeUndefined();
+    expect(htmlFetches(fetcher)).toBe(3);
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ action: 'web_version_html_unavailable' }),
+    );
+  });
+
+  it('keeps the build when its page cannot be fetched', async () => {
+    const fetcher = jest.fn((url: string) =>
+      url === WA_VERSION_REGISTRY_URL
+        ? Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(registry) })
+        : Promise.reject(new Error('ECONNRESET')),
+    );
+    await expect(resolveWebVersionPin(fetcher as never)).resolves.toMatchObject({ webVersion: '2.3000.NEW-alpha' });
+  });
+
+  it('never checks or swaps a build the operator pinned', async () => {
+    process.env.WWEBJS_WEB_VERSION = '2.3000.NEW-alpha';
+    const fetcher = fetcherFor(['NEW']);
+    await expect(resolveWebVersionPin(fetcher as never)).resolves.toMatchObject({ webVersion: '2.3000.NEW-alpha' });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('pickSettledWebVersion passes over skipped builds, currentVersion included', () => {
+    expect(pickSettledWebVersion([], Date.now(), '2.3000.NEW-alpha', new Set(['2.3000.NEW-alpha']))).toBeNull();
+    expect(
+      pickSettledWebVersion(registry.versions, Date.now(), registry.currentVersion, new Set(['2.3000.NEW-alpha'])),
+    ).toBe('2.3000.MID-alpha');
+  });
+});

@@ -2249,6 +2249,8 @@ The `Contact` object returned by the list and get-by-id routes has this shape:
 
 List all contacts for a session, returned as an in-memory paginated window.
 
+On whatsapp-web.js, a contact the page holds under both its LID and its phone is listed once, under its phone id with the phone as `number`.
+
 **Auth:** API key
 
 **Path parameters**
@@ -2287,7 +2289,8 @@ List all contacts for a session, returned as an in-memory paginated window.
 The contacts this account has blocked — the read half of the block/unblock endpoints. A bare array
 of neutral contact ids, and ids only: whatsapp-web.js resolves full contact models, but Baileys'
 blocklist query answers bare jids, and inventing the other fields on one engine would make the two
-engines claim different things about the same account.
+engines claim different things about the same account. An id is listed once, even when whatsapp-web.js
+holds the contact under both its LID and its phone.
 
 **Auth:** API key
 

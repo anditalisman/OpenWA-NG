@@ -18,7 +18,12 @@ import {
   NAVIGATION_REINJECT_GRACE_MS,
   NAVIGATION_EPISODE_CAP_MS,
 } from './whatsapp-web-js.adapter';
-import { getEffectiveWebVersionInfo, resolveWebVersionPin, __resetWebVersionCache } from '../wa-web-version';
+import {
+  getEffectiveWebVersionInfo,
+  resolveWebVersionPin,
+  __resetWebVersionCache,
+  WA_VERSION_REGISTRY_URL,
+} from '../wa-web-version';
 import { resolveEngineInitTimeoutMs } from '../engine-init-timeout';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -3019,12 +3024,16 @@ describe('resolveWebVersionPin (#251/#488 — explicit pin + auto-resolve curren
     expect(await resolveWebVersionPin(fetcherFor(null, false))).toBeUndefined();
   });
 
-  it('caches the resolved current version (fetches once across calls)', async () => {
+  // The pin also fetches each build's page once to refuse the logged-out page (#2023), so these count the registry reads.
+  const registryCalls = (fetcher: unknown): number =>
+    (fetcher as jest.Mock).mock.calls.filter(([url]) => url === WA_VERSION_REGISTRY_URL).length;
+
+  it('caches the resolved current version (reads the registry once across calls)', async () => {
     delete process.env.WWEBJS_WEB_VERSION;
     const fetcher = fetcherFor('2.3000.1042251103-alpha');
     await resolveWebVersionPin(fetcher);
     await resolveWebVersionPin(fetcher);
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(registryCalls(fetcher)).toBe(1);
   });
 
   it('rate-limits a transient failure (no refetch within the backoff window) but does NOT cache it permanently', async () => {
@@ -3042,16 +3051,16 @@ describe('resolveWebVersionPin (#251/#488 — explicit pin + auto-resolve curren
     const ok = fetcherFor('2.3000.1042251103-alpha');
     const pin = await resolveWebVersionPin(ok);
     expect(pin?.webVersion).toBe('2.3000.1042251103-alpha');
-    expect(ok).toHaveBeenCalledTimes(1);
+    expect(registryCalls(ok)).toBe(1);
   });
 
-  it('dedupes concurrent in-flight resolves into a single fetch', async () => {
+  it('dedupes concurrent in-flight resolves into a single registry fetch', async () => {
     delete process.env.WWEBJS_WEB_VERSION;
     const fetcher = fetcherFor('2.3000.1042251103-alpha');
     const [a, b] = await Promise.all([resolveWebVersionPin(fetcher), resolveWebVersionPin(fetcher)]);
     expect(a?.webVersion).toBe('2.3000.1042251103-alpha');
     expect(b?.webVersion).toBe('2.3000.1042251103-alpha');
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(registryCalls(fetcher)).toBe(1);
   });
 });
 
@@ -3446,10 +3455,10 @@ describe('WhatsAppWebJsAdapter message_reaction (id resolution across WA Web bui
     return calls[0][0];
   };
 
-  const emitReaction = (client: EventEmitter, msgId: unknown): void => {
+  const emitReaction = (client: EventEmitter, msgId: unknown, key: object = { remote: 'peer@c.us' }): void => {
     client.emit('message_reaction', {
       msgId,
-      id: { remote: 'peer@c.us' },
+      id: key,
       reaction: '👍',
       senderId: 'peer@c.us',
     });
@@ -3481,6 +3490,31 @@ describe('WhatsAppWebJsAdapter message_reaction (id resolution across WA Web bui
     // Never undefined: downstream looks the message up by this id, and TypeORM drops an undefined
     // condition from the where-clause — which would match an unrelated row.
     expect(reactionArg(onMessageReaction).messageId).toBe('');
+  });
+
+  // The reaction's key crosses the page boundary as JSON, so a chat id WhatsApp Web keeps as a Wid object arrives
+  // as an object; downstream compares chatId as a string and publishes it in the message.reaction payload.
+  it.each([
+    ['a string', 'peer@c.us'],
+    ['an object with _serialized', { _serialized: 'peer@c.us', user: 'peer', server: 'c.us' }],
+    ['an object on a build that renamed _serialized (#747)', { $1: 'peer@c.us' }],
+  ])('reads the chat id of a reaction whose remote arrives as %s', (_how, remote) => {
+    const { onMessageReaction, client } = wireReactionHandler();
+
+    emitReaction(client, { _serialized: 'REACTED_MSG' }, { remote });
+
+    expect(reactionArg(onMessageReaction).chatId).toBe('peer@c.us');
+  });
+
+  it.each([
+    ['missing', {}],
+    ['an object with no readable id', { remote: {} }],
+  ])('emits the empty chat id, never undefined or an object, when the remote is %s', (_how, key) => {
+    const { onMessageReaction, client } = wireReactionHandler();
+
+    emitReaction(client, { _serialized: 'REACTED_MSG' }, key);
+
+    expect(reactionArg(onMessageReaction).chatId).toBe('');
   });
 });
 
@@ -5504,6 +5538,51 @@ describe('WhatsAppWebJsAdapter navigation re-inject grace (#1081)', () => {
     await expect(adapter.probeLiveness()).resolves.toBe(false);
   });
 
+  describe('a reloaded page whose event bridge is not attached (#2002)', () => {
+    const connected = (eventsAttached: boolean) => ({
+      getState: jest.fn().mockResolvedValue(WAState.CONNECTED),
+      eventsAttached,
+    });
+
+    it('answers alive while the navigation window lasts', async () => {
+      const { adapter, client } = wireAdapter(connected(false));
+
+      client.pupPage.emit('framenavigated', navFrame());
+
+      await expect(adapter.probeLiveness()).resolves.toBe(true);
+    });
+
+    it('fails the probe once the window has passed, so the watchdog restarts the session', async () => {
+      jest.useFakeTimers();
+      const { adapter, client } = wireAdapter(connected(false));
+
+      client.pupPage.emit('framenavigated', navFrame());
+      jest.setSystemTime(Date.now() + NAVIGATION_REINJECT_GRACE_MS);
+
+      await expect(adapter.probeLiveness()).resolves.toBe(false);
+    });
+
+    it("does not let a 'ready' re-emitted before the attach close the window", async () => {
+      const { adapter, client } = wireAdapter({
+        getState: jest.fn().mockRejectedValue(new Error('Execution context was destroyed')),
+        eventsAttached: false,
+      } as Partial<NavFakeClient>);
+
+      client.pupPage.emit('framenavigated', navFrame());
+      client.emit('ready');
+
+      await expect(adapter.probeLiveness()).resolves.toBe(true);
+    });
+
+    it('stays alive once the bridge attached', async () => {
+      const { adapter, client } = wireAdapter(connected(true));
+
+      client.pupPage.emit('framenavigated', navFrame());
+
+      await expect(adapter.probeLiveness()).resolves.toBe(true);
+    });
+  });
+
   it('does not stamp a post_logout navigation — the credential teardown path must win', async () => {
     const { adapter, client } = wireAdapter();
 
@@ -5989,6 +6068,76 @@ describe('WhatsAppWebJsAdapter page transport error detection (wedged page fast-
       { id: '111@c.us', name: 'Alice', pushName: 'Ally', number: '111', isMyContact: true, isBlocked: false },
       { id: '222@c.us', name: 'Bob', pushName: 'Bobby', number: '222', isMyContact: false, isBlocked: true },
     ]);
+  });
+
+  // A contact migrated to privacy-id addressing is two WhatsApp Web records, its LID and its phone.
+  // whatsapp-web.js answers the LID record under the phone id (a plain string, the model's `phoneNumber`)
+  // but leaves `number` at the LID's digits, so the phone id came back twice, once with the wrong number.
+  const lidRecord = {
+    id: '628111@c.us',
+    pushname: 'Ally',
+    number: '262813461250071',
+    isMyContact: false,
+    isBlocked: false,
+  };
+  const phoneRecord = {
+    id: { _serialized: '628111@c.us' },
+    name: 'Alice',
+    number: '628111',
+    isMyContact: true,
+    isBlocked: false,
+  };
+
+  it.each([
+    ['the LID record first', [lidRecord, phoneRecord]],
+    ['the phone record first', [phoneRecord, lidRecord]],
+  ])('lists a contact held as a LID and a phone record once, with its phone as number (%s)', async (_order, rows) => {
+    const getContacts = jest.fn().mockResolvedValue(rows);
+    const { adapter } = readyAdapter({ getContacts });
+
+    await expect(adapter.getContacts()).resolves.toEqual([
+      { id: '628111@c.us', name: 'Alice', pushName: 'Ally', number: '628111', isMyContact: true, isBlocked: false },
+    ]);
+  });
+
+  it('keeps a folded contact where its first copy was, and a block on either copy survives', async () => {
+    const other = { id: { _serialized: '999@c.us' }, name: 'Zed', number: '999', isMyContact: true, isBlocked: false };
+    const getContacts = jest.fn().mockResolvedValue([lidRecord, other, { ...phoneRecord, isBlocked: true }]);
+    const { adapter } = readyAdapter({ getContacts });
+
+    const contacts = await adapter.getContacts();
+
+    expect(contacts.map(c => c.id)).toEqual(['628111@c.us', '999@c.us']);
+    expect(contacts[0].isBlocked).toBe(true);
+  });
+
+  it('leaves a LID with no known phone under its @lid id and the number WhatsApp Web gave', async () => {
+    const unresolved = {
+      id: { _serialized: '262813461250071@lid' },
+      number: '262813461250071',
+      isMyContact: false,
+      isBlocked: false,
+    };
+    const getContacts = jest.fn().mockResolvedValue([unresolved]);
+    const { adapter } = readyAdapter({ getContacts });
+
+    await expect(adapter.getContacts()).resolves.toEqual([
+      { id: '262813461250071@lid', number: '262813461250071', isMyContact: false, isBlocked: false },
+    ]);
+  });
+
+  it('getContactById gives a contact answered under its phone id that phone as number', async () => {
+    const getContactById = jest.fn().mockResolvedValue({ ...lidRecord, name: 'Alice', isMyContact: true });
+    const { adapter } = readyAdapter({ getContactById });
+
+    await expect(adapter.getContactById('262813461250071@lid')).resolves.toEqual({
+      id: '628111@c.us',
+      name: 'Alice',
+      pushName: 'Ally',
+      number: '628111',
+      isMyContact: true,
+      isBlocked: false,
+    });
   });
 
   // #1476: an entry with no readable wid under either name (a shape wwebjs itself sometimes returns)

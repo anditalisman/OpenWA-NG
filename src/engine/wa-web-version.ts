@@ -41,6 +41,19 @@ let lastFailureAt = 0;
 
 let warnedRemoteTrust = false;
 
+// WhatsApp's logged-out landing page, which the registry has stored as the HTML of a few builds. It is a valid
+// page, but it holds none of WhatsApp Web's modules, so a session started on it fails at once
+// (`window.require('WAWebSocketModel')` is null). Its root element's id names it.
+const LOGGED_OUT_PAGE = /<html\b[^>]*\bid\s*=\s*["']whatsapp-web-logged-out["']/i;
+// Builds whose page was that one. The next auto-resolve skips them, so the pin moves to an older settled build
+// instead of holding the broken one for CACHE_TTL_MS.
+const rejectedBuilds = new Set<string>();
+// Builds whose page was checked and is not the logged-out one, so each build is fetched at most once per process.
+const checkedBuilds = new Set<string>();
+// How many registry builds an auto pin tries before the session loads the live build instead.
+const MAX_AUTO_BUILDS = 3;
+const PAGE_CHECK_TIMEOUT_MS = 10_000;
+
 /** Test-only: reset the resolved-version cache between cases. */
 export function __resetWebVersionCache(): void {
   cachedCurrentVersion = undefined;
@@ -48,6 +61,8 @@ export function __resetWebVersionCache(): void {
   inFlight = null;
   lastFailureAt = 0;
   warnedRemoteTrust = false;
+  rejectedBuilds.clear();
+  checkedBuilds.clear();
 }
 
 /**
@@ -121,16 +136,23 @@ type WaVersionEntry = { version?: unknown; beta?: unknown; released?: unknown; e
  * unexpired build published at least `WEB_VERSION_SETTLE_MS` ago — i.e. one the ecosystem has had
  * time to validate — rather than the registry's `currentVersion`, which can be minutes old. Falls
  * back to `currentVersion` when no build qualifies (a freshly-reset registry, or every build still
- * too new), so this hardens pinning without ever defeating it. Pure: pass `now` explicitly.
+ * too new), so this hardens pinning without ever defeating it. Builds in `skip` (their page was not the app) are
+ * passed over, `currentVersion` included. Pure: pass `now` explicitly.
  */
-export function pickSettledWebVersion(versions: unknown, now: number, currentVersion: string | null): string | null {
-  if (!Array.isArray(versions)) return currentVersion;
+export function pickSettledWebVersion(
+  versions: unknown,
+  now: number,
+  currentVersion: string | null,
+  skip: ReadonlySet<string> = new Set(),
+): string | null {
+  const fallback = currentVersion && !skip.has(currentVersion) ? currentVersion : null;
+  if (!Array.isArray(versions)) return fallback;
   const settledCutoff = now - WEB_VERSION_SETTLE_MS;
   let best: { version: string; released: number } | null = null;
   for (const raw of versions) {
     if (!raw || typeof raw !== 'object') continue;
     const e = raw as WaVersionEntry;
-    if (typeof e.version !== 'string' || !/^\d/.test(e.version)) continue;
+    if (typeof e.version !== 'string' || !/^\d/.test(e.version) || skip.has(e.version)) continue;
     if (e.beta === true) continue;
     const released = typeof e.released === 'string' ? Date.parse(e.released) : NaN;
     if (!Number.isFinite(released) || released > settledCutoff) continue; // too fresh
@@ -138,7 +160,7 @@ export function pickSettledWebVersion(versions: unknown, now: number, currentVer
     if (Number.isFinite(expire) && expire <= now) continue; // already expired
     if (!best || best.released < released) best = { version: e.version, released };
   }
-  return best?.version ?? currentVersion;
+  return best?.version ?? fallback;
 }
 
 /**
@@ -166,7 +188,7 @@ export async function resolveCurrentWebVersion(fetcher: typeof fetch = fetch): P
         const json = (await res.json()) as { currentVersion?: unknown; versions?: unknown };
         const rawCurrent =
           typeof json.currentVersion === 'string' && /^\d/.test(json.currentVersion) ? json.currentVersion : null;
-        const picked = pickSettledWebVersion(json.versions, Date.now(), rawCurrent);
+        const picked = pickSettledWebVersion(json.versions, Date.now(), rawCurrent, rejectedBuilds);
         if (picked) {
           cachedCurrentVersion = picked; // cache only on success
           cachedAt = Date.now();
@@ -196,6 +218,8 @@ export async function resolveCurrentWebVersion(fetcher: typeof fetch = fetch): P
  * - unset / `auto` / `latest`                         → auto-resolve the current known-good build
  *   from the wa-version registry and pin it; if that fetch fails, fall back to native auto-select.
  * `WWEBJS_WEB_VERSION_REMOTE_PATH` overrides the HTML URL template (`{version}` placeholder).
+ * An auto-resolved build whose page is the logged-out landing page is skipped for the next older settled build (up
+ * to MAX_AUTO_BUILDS tried); an exact version the operator set is never swapped.
  * The auto-resolve replaces whatsapp-web.js's unreliable default that caused #488 (scan → stuck →
  * disconnect loop) on Docker setups where no version was pinned.
  */
@@ -208,11 +232,56 @@ export async function resolveWebVersionPin(fetcher: typeof fetch = fetch): Promi
     return pin;
   }
   if (lc === 'off') return undefined; // explicit escape hatch → native auto-select
-  const current = await resolveCurrentWebVersion(fetcher);
-  if (!current) return undefined;
-  const pin = buildRemotePin(current);
-  warnRemoteTrustOnce(pin);
-  return pin;
+  for (let attempt = 1; ; attempt++) {
+    const current = await resolveCurrentWebVersion(fetcher);
+    if (!current) return undefined;
+    const pin = buildRemotePin(current);
+    if (!(await isLoggedOutBuild(pin, fetcher))) {
+      warnRemoteTrustOnce(pin);
+      return pin;
+    }
+    const willRetry = attempt < MAX_AUTO_BUILDS;
+    logger.warn(
+      willRetry
+        ? 'The registry build is the WhatsApp Web logged-out page, not the app; trying an older settled build'
+        : 'The registry builds tried are the WhatsApp Web logged-out page; continuing WITHOUT a pin',
+      { action: willRetry ? 'web_version_html_rejected' : 'web_version_html_unavailable', webVersion: current },
+    );
+    if (!willRetry) return undefined;
+  }
+}
+
+/**
+ * Whether an auto-resolved build's page is WhatsApp's logged-out landing page. The page is fetched once per build
+ * per process; a rejected build is dropped from the cache so the next resolve reads the registry again and skips
+ * it. A fetch that fails says nothing about the page, so the build is kept (whatsapp-web.js fetches it again).
+ */
+async function isLoggedOutBuild(pin: WebVersionPin, fetcher: typeof fetch): Promise<boolean> {
+  const { webVersion } = pin;
+  if (rejectedBuilds.has(webVersion)) return true;
+  if (checkedBuilds.has(webVersion)) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PAGE_CHECK_TIMEOUT_MS);
+  try {
+    const res = await fetcher(pin.webVersionCache.remotePath, { signal: controller.signal });
+    if (!res.ok) return false;
+    const html = await res.text();
+    if (!LOGGED_OUT_PAGE.test(html)) {
+      checkedBuilds.add(webVersion);
+      return false;
+    }
+    rejectedBuilds.add(webVersion);
+    if (cachedCurrentVersion === webVersion) {
+      cachedCurrentVersion = undefined; // the next resolve reads the registry again and skips this build
+      cachedAt = 0;
+    }
+    lastFailureAt = 0; // the registry itself answered; let the next resolve read it at once
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

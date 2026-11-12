@@ -633,6 +633,29 @@ describe('MessageService', () => {
 
       expect(mockEngine.deleteMessage).toHaveBeenCalledWith('test@c.us', 'wa-msg-1', false);
     });
+
+    it('clears the stored row under the id the engine keys the message by when it differs from the one named', async () => {
+      mockEngine.deleteMessage.mockResolvedValueOnce('true_test@c.us_KEY1');
+
+      await service.deleteMessage('sess-1', { chatId: 'test@c.us', messageId: 'KEY1' });
+
+      expect(repository.update).toHaveBeenCalledWith(
+        { sessionId: 'sess-1', waMessageId: 'KEY1' },
+        { body: '', type: 'revoked' },
+      );
+      expect(repository.update).toHaveBeenCalledWith(
+        { sessionId: 'sess-1', waMessageId: 'true_test@c.us_KEY1' },
+        { body: '', type: 'revoked' },
+      );
+    });
+
+    it('clears the stored row once when the engine reports the same id or none', async () => {
+      mockEngine.deleteMessage.mockResolvedValueOnce('wa-msg-1');
+      await service.deleteMessage('sess-1', { chatId: 'test@c.us', messageId: 'wa-msg-1' });
+      await service.deleteMessage('sess-1', { chatId: 'test@c.us', messageId: 'wa-msg-2' });
+
+      expect(repository.update).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('editMessage', () => {

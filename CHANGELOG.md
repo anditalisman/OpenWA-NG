@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Log the page visibility, the H.264/AAC playback answer and the browser version when a whatsapp-web.js video send or video status post times out in WhatsApp Web's 20 second video load (`video_load_timeout`).
+- The Baileys linked-device name defaults to `Ubuntu` instead of `OpenWA`, so phone-number pairing works without setting `BAILEYS_BROWSER_NAME`.
 - A whatsapp-web.js protocol timeout is no longer eligible to be classified as a dead page.
   Behaviour is unchanged on the current Puppeteer; the guard keeps a future bump from reporting a
   slow command as a transport death.
@@ -52,6 +54,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- whatsapp-web.js: a reloaded page whose event listeners fail to attach is no longer counted as recovered. The liveness probe answers alive only while the navigation window lasts, then fails so the watchdog restarts the session instead of leaving it READY without inbound messages. The ready-sync install patch now resets its marker for every page (`per-page marker reset applied` on an existing install).
+- Flag the stored copy of a message deleted on whatsapp-web.js by its bare key id as revoked; it stayed in place before because the row is keyed by the serialized id.
+- Queue whatsapp-web.js label writes per chat whichever id names it, and write them to the id WhatsApp Web keys the chat by, so adding two labels to one chat at the same time no longer removes one of them, and a label added by a contact's phone id to a chat keyed by its lid is no longer silently dropped.
+- Report the chat id of a whatsapp-web.js `message.reaction` as a string if WhatsApp Web sends it as an object.
+- Fold a whatsapp-web.js mention given as a padded, upper-case, `@s.whatsapp.net`, `:device` or hosted id to the neutral id before it reaches WhatsApp Web, in text, media, sticker, reply and edit sends, as Baileys already does.
+- Reduce a group participant id to its neutral form before it reaches the engine, so `628123:3@c.us` or `628123@C.US` no longer reports a real member as not a member.
+- Stop delivering whatsapp-web.js system notices (a changed security code, the encryption notice, business and broadcast notices) as `unknown` messages on `message.received` and `message.sent`, so they are no longer stored or passed to the message hooks, and stop announcing `message.ack` for them.
+- Stop storing, listing and announcing (`status.received`) a whatsapp-web.js story that arrives already deleted, live or in the backfill made on connect.
+- Skip a WhatsApp Web build whose registry page is the logged-out landing page and pin the next older settled build instead (up to three are tried, warning `web_version_html_rejected`); every whatsapp-web.js session start on such a build failed with `Cannot read properties of null`. An exact `WWEBJS_WEB_VERSION` is never checked or swapped.
+- A whatsapp-web.js session whose proxy asks for a username and password failed every start after the first with `net::ERR_INVALID_AUTH_CREDENTIALS`, because WhatsApp Web's service worker, registered in the saved profile, took the page's requests out of reach of the proxy login; the page now ignores the service worker for such a session (#819).
+- List a whatsapp-web.js contact held under both its LID and its phone once in the contacts and blocked lists, with the phone as `number`, instead of twice with the LID's digits.
 - Paged lists now tiebreak on `id`, so a walk returns every row exactly once. Neither `createdAt` nor
   a search relevance score is unique, and on PostgreSQL two identical statements could sort one tie
   group differently, silently repeating some rows and omitting others: a 5000-row message list lost

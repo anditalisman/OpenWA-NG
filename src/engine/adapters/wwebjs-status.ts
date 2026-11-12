@@ -10,6 +10,7 @@ import {
 import { SerializedWid } from '../types/whatsapp-web-js.types';
 import { toMessageMedia } from './wwebjs-messaging';
 import { type WwebjsEngineHost } from './wwebjs-host';
+import { noteVideoLoadTimeout } from './wwebjs-video-load-timeout';
 import { EngineTransportError } from '../../common/errors/engine-transport.error';
 
 /**
@@ -198,7 +199,10 @@ export class WwebjsStatus {
         ...(options.caption !== undefined ? { caption: options.caption } : {}),
         ...extra,
       }),
-    );
+    ).catch((error: unknown) => {
+      noteVideoLoadTimeout(this.host, error, messageMedia.mimetype);
+      throw error;
+    });
     return toStatusResult(msg);
   }
 
