@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- whatsapp-web.js: a reloaded page whose event listeners fail to attach is no longer counted as recovered. The liveness probe answers alive only while the navigation window lasts, then fails so the watchdog restarts the session instead of leaving it READY without inbound messages. The ready-sync install patch now resets its marker for every page (`per-page marker reset applied` on an existing install).
 - Flag the stored copy of a message deleted on whatsapp-web.js by its bare key id as revoked; it stayed in place before because the row is keyed by the serialized id.
 - Queue whatsapp-web.js label writes per chat whichever id names it, and write them to the id WhatsApp Web keys the chat by, so adding two labels to one chat at the same time no longer removes one of them, and a label added by a contact's phone id to a chat keyed by its lid is no longer silently dropped.
 - Report the chat id of a whatsapp-web.js `message.reaction` as a string if WhatsApp Web sends it as an object.

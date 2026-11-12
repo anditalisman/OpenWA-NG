@@ -5538,6 +5538,51 @@ describe('WhatsAppWebJsAdapter navigation re-inject grace (#1081)', () => {
     await expect(adapter.probeLiveness()).resolves.toBe(false);
   });
 
+  describe('a reloaded page whose event bridge is not attached (#2002)', () => {
+    const connected = (eventsAttached: boolean) => ({
+      getState: jest.fn().mockResolvedValue(WAState.CONNECTED),
+      eventsAttached,
+    });
+
+    it('answers alive while the navigation window lasts', async () => {
+      const { adapter, client } = wireAdapter(connected(false));
+
+      client.pupPage.emit('framenavigated', navFrame());
+
+      await expect(adapter.probeLiveness()).resolves.toBe(true);
+    });
+
+    it('fails the probe once the window has passed, so the watchdog restarts the session', async () => {
+      jest.useFakeTimers();
+      const { adapter, client } = wireAdapter(connected(false));
+
+      client.pupPage.emit('framenavigated', navFrame());
+      jest.setSystemTime(Date.now() + NAVIGATION_REINJECT_GRACE_MS);
+
+      await expect(adapter.probeLiveness()).resolves.toBe(false);
+    });
+
+    it("does not let a 'ready' re-emitted before the attach close the window", async () => {
+      const { adapter, client } = wireAdapter({
+        getState: jest.fn().mockRejectedValue(new Error('Execution context was destroyed')),
+        eventsAttached: false,
+      } as Partial<NavFakeClient>);
+
+      client.pupPage.emit('framenavigated', navFrame());
+      client.emit('ready');
+
+      await expect(adapter.probeLiveness()).resolves.toBe(true);
+    });
+
+    it('stays alive once the bridge attached', async () => {
+      const { adapter, client } = wireAdapter(connected(true));
+
+      client.pupPage.emit('framenavigated', navFrame());
+
+      await expect(adapter.probeLiveness()).resolves.toBe(true);
+    });
+  });
+
   it('does not stamp a post_logout navigation — the credential teardown path must win', async () => {
     const { adapter, client } = wireAdapter();
 
