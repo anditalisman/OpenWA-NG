@@ -18,7 +18,12 @@ import {
   NAVIGATION_REINJECT_GRACE_MS,
   NAVIGATION_EPISODE_CAP_MS,
 } from './whatsapp-web-js.adapter';
-import { getEffectiveWebVersionInfo, resolveWebVersionPin, __resetWebVersionCache } from '../wa-web-version';
+import {
+  getEffectiveWebVersionInfo,
+  resolveWebVersionPin,
+  __resetWebVersionCache,
+  WA_VERSION_REGISTRY_URL,
+} from '../wa-web-version';
 import { resolveEngineInitTimeoutMs } from '../engine-init-timeout';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -3019,12 +3024,16 @@ describe('resolveWebVersionPin (#251/#488 — explicit pin + auto-resolve curren
     expect(await resolveWebVersionPin(fetcherFor(null, false))).toBeUndefined();
   });
 
-  it('caches the resolved current version (fetches once across calls)', async () => {
+  // The pin also fetches each build's page once to refuse the logged-out page (#2023), so these count the registry reads.
+  const registryCalls = (fetcher: unknown): number =>
+    (fetcher as jest.Mock).mock.calls.filter(([url]) => url === WA_VERSION_REGISTRY_URL).length;
+
+  it('caches the resolved current version (reads the registry once across calls)', async () => {
     delete process.env.WWEBJS_WEB_VERSION;
     const fetcher = fetcherFor('2.3000.1042251103-alpha');
     await resolveWebVersionPin(fetcher);
     await resolveWebVersionPin(fetcher);
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(registryCalls(fetcher)).toBe(1);
   });
 
   it('rate-limits a transient failure (no refetch within the backoff window) but does NOT cache it permanently', async () => {
@@ -3042,16 +3051,16 @@ describe('resolveWebVersionPin (#251/#488 — explicit pin + auto-resolve curren
     const ok = fetcherFor('2.3000.1042251103-alpha');
     const pin = await resolveWebVersionPin(ok);
     expect(pin?.webVersion).toBe('2.3000.1042251103-alpha');
-    expect(ok).toHaveBeenCalledTimes(1);
+    expect(registryCalls(ok)).toBe(1);
   });
 
-  it('dedupes concurrent in-flight resolves into a single fetch', async () => {
+  it('dedupes concurrent in-flight resolves into a single registry fetch', async () => {
     delete process.env.WWEBJS_WEB_VERSION;
     const fetcher = fetcherFor('2.3000.1042251103-alpha');
     const [a, b] = await Promise.all([resolveWebVersionPin(fetcher), resolveWebVersionPin(fetcher)]);
     expect(a?.webVersion).toBe('2.3000.1042251103-alpha');
     expect(b?.webVersion).toBe('2.3000.1042251103-alpha');
-    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(registryCalls(fetcher)).toBe(1);
   });
 });
 
