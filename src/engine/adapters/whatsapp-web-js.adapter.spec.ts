@@ -6013,8 +6013,8 @@ describe('WhatsAppWebJsAdapter page transport error detection (wedged page fast-
     ['the LID record first', [lidRecord, phoneRecord]],
     ['the phone record first', [phoneRecord, lidRecord]],
   ])('lists a contact held as a LID and a phone record once, with its phone as number (%s)', async (_order, rows) => {
-    const evaluate = jest.fn().mockResolvedValue({ rows, failed: 0 });
-    const { adapter } = readyAdapter({ pupPage: { evaluate } });
+    const getContacts = jest.fn().mockResolvedValue(rows);
+    const { adapter } = readyAdapter({ getContacts });
 
     await expect(adapter.getContacts()).resolves.toEqual([
       { id: '628111@c.us', name: 'Alice', pushName: 'Ally', number: '628111', isMyContact: true, isBlocked: false },
@@ -6023,11 +6023,8 @@ describe('WhatsAppWebJsAdapter page transport error detection (wedged page fast-
 
   it('keeps a folded contact where its first copy was, and a block on either copy survives', async () => {
     const other = { id: { _serialized: '999@c.us' }, name: 'Zed', number: '999', isMyContact: true, isBlocked: false };
-    const evaluate = jest.fn().mockResolvedValue({
-      rows: [lidRecord, other, { ...phoneRecord, isBlocked: true }],
-      failed: 0,
-    });
-    const { adapter } = readyAdapter({ pupPage: { evaluate } });
+    const getContacts = jest.fn().mockResolvedValue([lidRecord, other, { ...phoneRecord, isBlocked: true }]);
+    const { adapter } = readyAdapter({ getContacts });
 
     const contacts = await adapter.getContacts();
 
@@ -6042,8 +6039,8 @@ describe('WhatsAppWebJsAdapter page transport error detection (wedged page fast-
       isMyContact: false,
       isBlocked: false,
     };
-    const evaluate = jest.fn().mockResolvedValue({ rows: [unresolved], failed: 0 });
-    const { adapter } = readyAdapter({ pupPage: { evaluate } });
+    const getContacts = jest.fn().mockResolvedValue([unresolved]);
+    const { adapter } = readyAdapter({ getContacts });
 
     await expect(adapter.getContacts()).resolves.toEqual([
       { id: '262813461250071@lid', number: '262813461250071', isMyContact: false, isBlocked: false },
